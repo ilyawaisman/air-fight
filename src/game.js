@@ -370,7 +370,7 @@ function resolveCombat(mover, start) {
     if (!plane.alive || plane.type !== "plane") continue;
     for (const turret of state.tokens) {
       if (!turret.alive || turret.type !== "turret" || turret.team === plane.team) continue;
-      if (distance(plane, turret) <= TURRET_RADIUS) {
+      if (distance(plane, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(turret, plane)) {
         eliminate(plane, eliminated);
         const shot = { fromX: turret.x, fromY: turret.y, toX: plane.x, toY: plane.y, color: TEAM[turret.team].color };
         if (!state.pendingShots) state.pendingShots = [];
@@ -590,6 +590,52 @@ function pathIntersectsObstacles(start, end) {
   for (const key of state.obstacles) {
     const [cx, cy] = key.split(",").map(Number);
     if (segmentIntersectsCell(start, end, cx, cy)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function segmentIntersectsCellOpen(start, end, cx, cy) {
+  const x0 = start.x;
+  const y0 = start.y;
+  const x1 = end.x;
+  const y1 = end.y;
+
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+
+  let txMin = -Infinity, txMax = Infinity;
+  if (dx === 0) {
+    if (x0 <= cx || x0 >= cx + 1) return false;
+  } else {
+    const t1 = (cx - x0) / dx;
+    const t2 = (cx + 1 - x0) / dx;
+    txMin = Math.min(t1, t2);
+    txMax = Math.max(t1, t2);
+  }
+
+  let tyMin = -Infinity, tyMax = Infinity;
+  if (dy === 0) {
+    if (y0 <= cy || y0 >= cy + 1) return false;
+  } else {
+    const t1 = (cy - y0) / dy;
+    const t2 = (cy + 1 - y0) / dy;
+    tyMin = Math.min(t1, t2);
+    tyMax = Math.max(t1, t2);
+  }
+
+  const tStart = Math.max(txMin, tyMin, 0);
+  const tEnd = Math.min(txMax, tyMax, 1);
+
+  return tStart < tEnd;
+}
+
+function pathIntersectsObstaclesOpen(start, end) {
+  if (!state.obstacles || !state.obstacles.size) return false;
+  for (const key of state.obstacles) {
+    const [cx, cy] = key.split(",").map(Number);
+    if (segmentIntersectsCellOpen(start, end, cx, cy)) {
       return true;
     }
   }
@@ -1268,7 +1314,7 @@ function scoreComputerPlaneMove(token, move) {
   }
 
   for (const turret of enemyTurrets) {
-    if (distancePoints(move, turret) <= TURRET_RADIUS) score -= 6500;
+    if (distancePoints(move, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(move, turret)) score -= 6500;
   }
 
   const nextVx = token.vx + move.ax;
