@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Air Fight</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="control-panel" aria-label="Game controls">
+        <div class="brand">
+          <h1>Air Fight</h1>
+          <p>Quad-ruled paper dogfight</p>
+        </div>
+
+        <div class="controls">
+          <label>
+            Field
+            <span class="field-pair">
+              <input id="fieldWidth" type="number" min="12" max="80" value="24" aria-label="Field width">
+              <span>x</span>
+              <input id="fieldHeight" type="number" min="16" max="96" value="48" aria-label="Field height">
+            </span>
+          </label>
+
+          <label>
+            Airplanes
+            <select id="planeCount">
+              <option value="1" selected>1</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+            </select>
+          </label>
+
+          <label>
+            Turrets
+            <select id="turretCount">
+              <option value="0">0</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+            </select>
+          </label>
+
+          <label>
+            Distance
+            <select id="metric">
+              <option value="linf" selected>L infinity</option>
+              <option value="taxicab">Taxicab</option>
+            </select>
+          </label>
+
+          <label>
+            Blue player
+            <select id="blueControl">
+              <option value="human" selected>Human</option>
+              <option value="computer">Computer</option>
+            </select>
+          </label>
+
+          <div class="buttons">
+            <button id="newGame" type="button">New fight</button>
+            <button id="replay" type="button">Replay fight</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="board-wrap" aria-label="Air Fight board">
+        <canvas id="board" width="1000" height="1600"></canvas>
+        <aside class="status-panel">
+          <div>
+            <span class="eyebrow">Turn</span>
+            <strong id="turnLabel">Red</strong>
+          </div>
+          <div>
+            <span class="eyebrow">Moving</span>
+            <strong id="moveLabel">Plane</strong>
+          </div>
+          <div>
+            <span class="eyebrow">Velocity</span>
+            <strong id="velocityLabel">(0, 0)</strong>
+          </div>
+          <div>
+            <span class="eyebrow">Red alive</span>
+            <strong id="redAlive">0</strong>
+          </div>
+          <div>
+            <span class="eyebrow">Blue alive</span>
+            <strong id="blueAlive">0</strong>
+          </div>
+          <p id="message" class="message">Choose one highlighted point.</p>
+        </aside>
+      </section>
+    </main>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
