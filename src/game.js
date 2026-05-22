@@ -709,53 +709,85 @@ function drawExplosions(geo) {
 function drawLasers(geo) {
   if (!state.lasers || !state.lasers.length) return;
   const now = performance.now();
-  state.lasers = state.lasers.filter((laser) => now - laser.born < 600);
+  state.lasers = state.lasers.filter((laser) => now - laser.born < 800);
 
   ctx.save();
   for (const laser of state.lasers) {
     const age = now - laser.born;
-    const opacity = Math.max(0, 1 - age / 600);
+    
+    // Calculate base opacity (stay at 1.0 for first 300ms, then fade)
+    let baseOpacity = 1;
+    if (age > 300) {
+      baseOpacity = Math.max(0, 1 - (age - 300) / 500);
+    }
+    
+    // Unstable electricity flicker effect
+    const flicker = 0.7 + 0.3 * Math.sin(age * 0.15);
+    const opacity = baseOpacity * flicker;
 
     const fromPx = gridToPixel({ x: laser.fromX, y: laser.fromY }, geo);
     const toPx = gridToPixel({ x: laser.toX, y: laser.toY }, geo);
 
-    // 1. Draw the beam line
-    // The beam grows from 'from' to 'to' over the first 200ms
+    // 1. Draw glowing outer laser beam line
     const growProgress = Math.min(1, age / 200);
     const currentToX = fromPx.x + (toPx.x - fromPx.x) * growProgress;
     const currentToY = fromPx.y + (toPx.y - fromPx.y) * growProgress;
 
     ctx.strokeStyle = laser.color;
-    ctx.lineWidth = Math.max(3 * geo.dpr, geo.cell * 0.15);
-    ctx.globalAlpha = opacity * 0.4;
+    ctx.lineWidth = Math.max(6 * geo.dpr, geo.cell * 0.28);
+    ctx.globalAlpha = opacity * 0.55;
+    ctx.shadowColor = laser.color;
+    ctx.shadowBlur = Math.max(15 * geo.dpr, geo.cell * 0.6);
     ctx.beginPath();
     ctx.moveTo(fromPx.x, fromPx.y);
     ctx.lineTo(currentToX, currentToY);
     ctx.stroke();
 
-    // Inner bright core
+    // 2. Draw inner bright core line
     ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = Math.max(1 * geo.dpr, geo.cell * 0.05);
+    ctx.lineWidth = Math.max(2 * geo.dpr, geo.cell * 0.08);
     ctx.globalAlpha = opacity;
+    ctx.shadowBlur = 0; // reset shadow for core
     ctx.beginPath();
     ctx.moveTo(fromPx.x, fromPx.y);
     ctx.lineTo(currentToX, currentToY);
     ctx.stroke();
 
-    // 2. Draw traveling energy pulse (bolt)
-    // Bolt travels from 'from' to 'to' over the first 300ms
-    const boltProgress = Math.min(1, age / 300);
+    // 3. Draw traveling energy pulse (charge particle)
+    const boltProgress = Math.min(1, age / 350);
     if (boltProgress < 1) {
       const bx = fromPx.x + (toPx.x - fromPx.x) * boltProgress;
       const by = fromPx.y + (toPx.y - fromPx.y) * boltProgress;
 
       ctx.fillStyle = "#ffffff";
       ctx.shadowColor = laser.color;
-      ctx.shadowBlur = 8 * geo.dpr;
+      ctx.shadowBlur = 12 * geo.dpr;
+      ctx.globalAlpha = baseOpacity;
       ctx.beginPath();
-      ctx.arc(bx, by, Math.max(4 * geo.dpr, geo.cell * 0.18), 0, Math.PI * 2);
+      ctx.arc(bx, by, Math.max(5 * geo.dpr, geo.cell * 0.22), 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0; // reset
+      ctx.shadowBlur = 0;
+    }
+
+    // 4. Draw expanding impact flash ring when it hits
+    if (age > 350) {
+      const flashAge = age - 350;
+      const flashProgress = Math.min(1, flashAge / 300); // lasts 300ms
+      const flashOpacity = (1 - flashProgress) * baseOpacity;
+      const flashRadius = flashProgress * geo.cell * 1.6;
+
+      ctx.strokeStyle = laser.color;
+      ctx.lineWidth = Math.max(2.5 * geo.dpr, geo.cell * 0.1);
+      ctx.globalAlpha = flashOpacity;
+      ctx.beginPath();
+      ctx.arc(toPx.x, toPx.y, flashRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = flashOpacity * 0.4;
+      ctx.beginPath();
+      ctx.arc(toPx.x, toPx.y, flashRadius * 0.35, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   ctx.restore();
