@@ -815,7 +815,7 @@ function animateReplayMove(move, done) {
 
   const tick = (now) => {
     const progress = Math.min(1, (now - started) / REPLAY_ANIMATION_MS);
-    state.tokens = interpolateSnapshots(before, after, progress, move.tokenId);
+    state.tokens = interpolateSnapshots(before, after, progress);
     draw();
 
     if (progress < 1) {
@@ -837,7 +837,7 @@ function animateReplayMove(move, done) {
   replayAnimationFrame = requestAnimationFrame(tick);
 }
 
-function interpolateSnapshots(before, after, progress, tokenId) {
+function interpolateSnapshots(before, after, progress) {
   return after.map((afterToken) => {
     const beforeToken = before.find((token) => token.id === afterToken.id) || afterToken;
     const token = {
@@ -847,9 +847,6 @@ function interpolateSnapshots(before, after, progress, tokenId) {
       history: afterToken.history ? afterToken.history.map((point) => ({ ...point })) : undefined,
     };
     if (progress < 1 && beforeToken.alive) token.alive = true;
-    if (progress < 1 && token.id === tokenId && token.history && token.history.length > 0) {
-      token.history[token.history.length - 1] = { x: token.x, y: token.y };
-    }
     return token;
   });
 }
