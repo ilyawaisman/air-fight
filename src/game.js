@@ -1053,7 +1053,7 @@ function drawHighlights(geo) {
       }
     }
 
-    if (keyLetter) {
+    if (keyLetter && token.team !== state.aiTeam) {
       ctx.fillStyle = TEAM[token.team].color;
       ctx.fillText(keyLetter, p.x, p.y);
     }
