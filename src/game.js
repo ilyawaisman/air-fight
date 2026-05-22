@@ -1079,6 +1079,21 @@ function drawHighlights(geo) {
   }
 
   const p = gridToPixel(anchor, geo);
+
+  if (token.type === "plane") {
+    const tokenPos = gridToPixel(token, geo);
+    ctx.strokeStyle = TEAM[token.team].color;
+    ctx.lineWidth = 1.2 * geo.dpr;
+    ctx.globalAlpha = 0.45;
+    ctx.setLineDash([4 * geo.dpr, 3 * geo.dpr]);
+    ctx.beginPath();
+    ctx.moveTo(tokenPos.x, tokenPos.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1.0;
+  }
+
   ctx.strokeStyle = TEAM[token.team].color;
   ctx.lineWidth = 2 * geo.dpr;
   ctx.beginPath();
