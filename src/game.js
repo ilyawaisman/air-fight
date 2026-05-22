@@ -39,9 +39,9 @@ const HIT_RADIUS = 1;
 const TURRET_RADIUS = 5;
 const OBSTACLE_CONFIGS = {
   none: { density: 0, minSize: 0, maxSize: 0 },
-  big: { density: 2, minSize: 9, maxSize: 25 },
-  small: { density: 5, minSize: 3, maxSize: 8 },
-  any: { density: 4, minSize: 3, maxSize: 25 }
+  big: { density: 3, minSize: 9, maxSize: 25 },
+  small: { density: 7.5, minSize: 3, maxSize: 8 },
+  any: { density: 6, minSize: 3, maxSize: 25 }
 };
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
@@ -129,6 +129,13 @@ function newState() {
     });
   };
 
+  const isValidObstacleCell = (cx, cy) => {
+    if (cx < 3 || cx >= width - 3 || cy < 3 || cy >= height - 3) {
+      return false;
+    }
+    return isSafeCell(cx, cy);
+  };
+
   const obstacles = new Set();
   const obstacleType = controls.obstacles.value;
   const config = OBSTACLE_CONFIGS[obstacleType] || OBSTACLE_CONFIGS.none;
@@ -143,7 +150,7 @@ function newState() {
       for (let attempts = 0; attempts < 150; attempts += 1) {
         const sx = Math.floor(Math.random() * width);
         const sy = Math.floor(Math.random() * height);
-        if (!obstacles.has(`${sx},${sy}`) && isSafeCell(sx, sy)) {
+        if (!obstacles.has(`${sx},${sy}`) && isValidObstacleCell(sx, sy)) {
           seed = { x: sx, y: sy };
           break;
         }
@@ -164,7 +171,7 @@ function newState() {
             const ny = cy + d.y;
             if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
               const nkey = `${nx},${ny}`;
-              if (!obstacles.has(nkey) && isSafeCell(nx, ny)) {
+              if (!obstacles.has(nkey) && isValidObstacleCell(nx, ny)) {
                 neighbors.push(nkey);
               }
             }
