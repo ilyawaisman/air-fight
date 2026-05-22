@@ -32,6 +32,18 @@ const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
 const REPLAY_ANIMATION_MS = 220;
 
+const KEY_MAP = {
+  KeyQ: { dx: -1, dy: 1, char: "Q" },
+  KeyW: { dx: 0, dy: 1, char: "W" },
+  KeyE: { dx: 1, dy: 1, char: "E" },
+  KeyA: { dx: -1, dy: 0, char: "A" },
+  KeyS: { dx: 0, dy: 0, char: "S" },
+  KeyD: { dx: 1, dy: 0, char: "D" },
+  KeyZ: { dx: -1, dy: -1, char: "Z" },
+  KeyX: { dx: 0, dy: -1, char: "X" },
+  KeyC: { dx: 1, dy: -1, char: "C" },
+};
+
 let state;
 let replayTimer = 0;
 let replayFrame = null;
@@ -553,12 +565,33 @@ function drawHighlights(geo) {
     ? { x: token.x + token.vx, y: token.y + token.vy }
     : { x: token.x, y: token.y };
 
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const fontSize = Math.max(9 * geo.dpr, geo.cell * 0.35);
+  ctx.font = `600 ${fontSize}px sans-serif`;
+
   for (const move of moves) {
     const p = gridToPixel(move, geo);
     ctx.fillStyle = TEAM[token.team].pale;
     ctx.beginPath();
     ctx.arc(p.x, p.y, Math.max(5 * geo.dpr, geo.cell * 0.35), 0, Math.PI * 2);
     ctx.fill();
+
+    const dx = move.x - anchor.x;
+    const dy = move.y - anchor.y;
+    let keyLetter = "";
+    for (const val of Object.values(KEY_MAP)) {
+      if (val.dx === dx && val.dy === dy) {
+        keyLetter = val.char;
+        break;
+      }
+    }
+
+    if (keyLetter) {
+      ctx.fillStyle = TEAM[token.team].color;
+      ctx.fillText(keyLetter, p.x, p.y);
+    }
   }
 
   const p = gridToPixel(anchor, geo);
@@ -567,6 +600,8 @@ function drawHighlights(geo) {
   ctx.beginPath();
   ctx.arc(p.x, p.y, Math.max(7 * geo.dpr, geo.cell * 0.45), 0, Math.PI * 2);
   ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawTokens(geo) {
@@ -875,6 +910,44 @@ canvas.addEventListener("click", (event) => {
     return;
   }
   moveToken(eventToGrid(event));
+});
+
+window.addEventListener("keydown", (event) => {
+  if (!state || state.replaying || state.gameOver || state.aiThinking) return;
+
+  // Prevent controls interaction conflicts (e.g. typing in width/height input fields)
+  if (
+    document.activeElement &&
+    (document.activeElement.tagName === "INPUT" ||
+     document.activeElement.tagName === "SELECT")
+  ) {
+    return;
+  }
+
+  const token = activeToken();
+  if (!token || token.team === state.aiTeam) return;
+
+  // Use event.code for layout independence, with a fallback using event.key
+  let offset = KEY_MAP[event.code];
+  if (!offset && event.key) {
+    const fallbackCode = "Key" + event.key.toUpperCase();
+    offset = KEY_MAP[fallbackCode];
+  }
+  if (!offset) return;
+
+  const moves = legalMoves(token);
+  const anchor = token.type === "plane"
+    ? { x: token.x + token.vx, y: token.y + token.vy }
+    : { x: token.x, y: token.y };
+
+  const targetX = anchor.x + offset.dx;
+  const targetY = anchor.y + offset.dy;
+
+  const matchedMove = moves.find((m) => m.x === targetX && m.y === targetY);
+  if (matchedMove) {
+    event.preventDefault();
+    moveToken(matchedMove);
+  }
 });
 
 controls.newGame.addEventListener("click", resetGame);
