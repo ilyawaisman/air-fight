@@ -57,6 +57,7 @@ let replayTimer = 0;
 let replayFrame = null;
 let replayAnimationFrame = null;
 let aiTimer = 0;
+let endGameUITimer = 0;
 
 function newState() {
   const width = clamp(Number(controls.width.value) || 24, 12, 80);
@@ -422,24 +423,34 @@ function checkWin() {
   const redPlanes = state.tokens.some((token) => token.team === "red" && token.type === "plane" && token.alive);
   const bluePlanes = state.tokens.some((token) => token.team === "blue" && token.type === "plane" && token.alive);
 
+  let outcome = null;
   if (!redTokens || !blueTokens) {
     state.gameOver = true;
     state.activeId = null;
     if (redTokens && !blueTokens) {
       labels.message.textContent = "Red wins.";
-      triggerEndGameUI("red");
+      outcome = "red";
     } else if (blueTokens && !redTokens) {
       labels.message.textContent = "Blue wins.";
-      triggerEndGameUI("blue");
+      outcome = "blue";
     } else {
       labels.message.textContent = "Both teams are gone.";
-      triggerEndGameUI("draw");
+      outcome = "draw";
     }
   } else if (!redPlanes && !bluePlanes) {
     state.gameOver = true;
     state.activeId = null;
     labels.message.textContent = "No planes remain.";
-    triggerEndGameUI("draw");
+    outcome = "draw";
+  }
+
+  if (outcome) {
+    clearTimeout(endGameUITimer);
+    endGameUITimer = setTimeout(() => {
+      if (state && state.gameOver) {
+        triggerEndGameUI(outcome);
+      }
+    }, 900);
   }
 }
 
@@ -978,6 +989,7 @@ function distancePoints(a, b) {
 function startReplay() {
   if (!state.moves.length || state.replaying) return;
   clearTimeout(aiTimer);
+  clearTimeout(endGameUITimer);
   cancelAnimationFrame(replayAnimationFrame);
   state.aiThinking = false;
 
@@ -1090,6 +1102,7 @@ function interpolateSnapshots(before, after, progress) {
 function resetGame() {
   clearTimeout(replayTimer);
   clearTimeout(aiTimer);
+  clearTimeout(endGameUITimer);
   cancelAnimationFrame(replayFrame);
   cancelAnimationFrame(replayAnimationFrame);
   state = newState();
@@ -1114,6 +1127,12 @@ canvas.addEventListener("click", (event) => {
     return;
   }
   moveToken(eventToGrid(event));
+});
+
+endGame.overlay.addEventListener("click", () => {
+  if (state && state.gameOver) {
+    showPersistentBannerOnly();
+  }
 });
 
 window.addEventListener("keydown", (event) => {
