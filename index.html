@@ -70,7 +70,18 @@
       </section>
 
       <section class="board-wrap" aria-label="Air Fight board">
-        <canvas id="board" width="1000" height="1600" tabindex="0"></canvas>
+        <div class="board-container" id="boardContainer">
+          <canvas id="board" width="1000" height="1600" tabindex="0"></canvas>
+          <div id="endGameOverlay" class="end-game-overlay">
+            <div class="overlay-content">
+              <h2 id="overlayTitle"></h2>
+              <p id="overlaySubtitle">Game Over</p>
+            </div>
+          </div>
+          <div id="endGameBanner" class="end-game-banner">
+            <span id="bannerText"></span>
+          </div>
+        </div>
         <aside class="status-panel">
           <div>
             <span class="eyebrow">Turn</span>
@@ -97,6 +108,6 @@
       </section>
     </main>
 
-    <script src="./src/game.js?v=3"></script>
+    <script src="./src/game.js?v=4"></script>
   </body>
 </html>

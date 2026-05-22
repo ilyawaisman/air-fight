@@ -21,6 +21,14 @@ const labels = {
   message: document.querySelector("#message"),
 };
 
+const endGame = {
+  container: document.querySelector("#boardContainer"),
+  overlay: document.querySelector("#endGameOverlay"),
+  overlayTitle: document.querySelector("#overlayTitle"),
+  banner: document.querySelector("#endGameBanner"),
+  bannerText: document.querySelector("#bannerText"),
+};
+
 const TEAM = {
   red: { color: "#d43d3d", pale: "rgba(212, 61, 61, 0.2)", name: "Red" },
   blue: { color: "#2563c7", pale: "rgba(37, 99, 199, 0.2)", name: "Blue" },
@@ -407,6 +415,8 @@ function distance(a, b) {
 }
 
 function checkWin() {
+  if (state.gameOver) return;
+
   const redTokens = state.tokens.some((token) => token.team === "red" && token.alive);
   const blueTokens = state.tokens.some((token) => token.team === "blue" && token.alive);
   const redPlanes = state.tokens.some((token) => token.team === "red" && token.type === "plane" && token.alive);
@@ -415,13 +425,87 @@ function checkWin() {
   if (!redTokens || !blueTokens) {
     state.gameOver = true;
     state.activeId = null;
-    if (redTokens && !blueTokens) labels.message.textContent = "Red wins.";
-    else if (blueTokens && !redTokens) labels.message.textContent = "Blue wins.";
-    else labels.message.textContent = "Both teams are gone.";
+    if (redTokens && !blueTokens) {
+      labels.message.textContent = "Red wins.";
+      triggerEndGameUI("red");
+    } else if (blueTokens && !redTokens) {
+      labels.message.textContent = "Blue wins.";
+      triggerEndGameUI("blue");
+    } else {
+      labels.message.textContent = "Both teams are gone.";
+      triggerEndGameUI("draw");
+    }
   } else if (!redPlanes && !bluePlanes) {
     state.gameOver = true;
     state.activeId = null;
     labels.message.textContent = "No planes remain.";
+    triggerEndGameUI("draw");
+  }
+}
+
+function triggerEndGameUI(outcome) {
+  if (!endGame.container) return;
+
+  hideEndGameUI();
+
+  if (outcome === "red") {
+    endGame.overlayTitle.textContent = "Red Wins";
+    endGame.overlayTitle.className = "winner-red";
+    endGame.bannerText.textContent = "🏆 Red Team Wins — Game Over";
+    endGame.banner.className = "end-game-banner active banner-red";
+    endGame.container.classList.add("winner-red");
+  } else if (outcome === "blue") {
+    endGame.overlayTitle.textContent = "Blue Wins";
+    endGame.overlayTitle.className = "winner-blue";
+    endGame.bannerText.textContent = "🏆 Blue Team Wins — Game Over";
+    endGame.banner.className = "end-game-banner active banner-blue";
+    endGame.container.classList.add("winner-blue");
+  } else {
+    endGame.overlayTitle.textContent = "Draw";
+    endGame.overlayTitle.className = "winner-draw";
+    endGame.bannerText.textContent = "🤝 Draw — Game Over";
+    endGame.banner.className = "end-game-banner active banner-draw";
+    endGame.container.classList.add("winner-draw");
+  }
+
+  endGame.overlay.classList.add("active");
+}
+
+function hideEndGameUI() {
+  if (!endGame.container) return;
+  endGame.overlay.classList.remove("active");
+  endGame.overlayTitle.className = "";
+  endGame.overlayTitle.textContent = "";
+  endGame.banner.className = "end-game-banner";
+  endGame.bannerText.textContent = "";
+  endGame.container.classList.remove("winner-red", "winner-blue", "winner-draw");
+}
+
+function showPersistentBannerOnly() {
+  if (!endGame.container) return;
+
+  const redTokens = state.tokens.some((token) => token.team === "red" && token.alive);
+  const blueTokens = state.tokens.some((token) => token.team === "blue" && token.alive);
+
+  let outcome = "draw";
+  if (!redTokens || !blueTokens) {
+    if (redTokens && !blueTokens) outcome = "red";
+    else if (blueTokens && !redTokens) outcome = "blue";
+  }
+
+  endGame.overlay.classList.remove("active");
+
+  endGame.container.classList.remove("winner-red", "winner-blue", "winner-draw");
+  endGame.container.classList.add(`winner-${outcome}`);
+
+  endGame.banner.className = `end-game-banner active banner-${outcome} no-delay`;
+
+  if (outcome === "red") {
+    endGame.bannerText.textContent = "🏆 Red Team Wins — Game Over";
+  } else if (outcome === "blue") {
+    endGame.bannerText.textContent = "🏆 Blue Team Wins — Game Over";
+  } else {
+    endGame.bannerText.textContent = "🤝 Draw — Game Over";
   }
 }
 
@@ -907,6 +991,7 @@ function startReplay() {
 
   const moves = [...state.moves];
   state.replaying = true;
+  hideEndGameUI();
   controls.replay.disabled = true;
   controls.newGame.disabled = true;
   labels.message.textContent = "Replaying the fight.";
@@ -942,6 +1027,10 @@ function startReplay() {
         controls.newGame.disabled = false;
         updateStatus();
         draw();
+
+        if (state.gameOver) {
+          showPersistentBannerOnly();
+        }
         return;
       }
 
@@ -1006,6 +1095,7 @@ function resetGame() {
   state = newState();
   state.activeId = state.tokens.find((token) => token.team === "red" && token.alive)?.id || null;
   labels.message.textContent = "Choose one highlighted point.";
+  hideEndGameUI();
   resolveForcedCrashes();
   updateReplayButton();
   controls.newGame.disabled = false;
