@@ -900,9 +900,11 @@ function resetGame() {
   updateStatus();
   draw();
   scheduleComputerMove();
+  canvas.focus();
 }
 
 canvas.addEventListener("click", (event) => {
+  canvas.focus();
   if (!state || state.replaying) return;
   const token = activeToken();
   if (token && token.team === state.aiTeam) {
