@@ -62,8 +62,8 @@ function newState() {
   let id = 1;
 
   for (const team of ["red", "blue"]) {
-    const planeY = team === "red" ? 2 : height - 3;
-    const turretY = team === "red" ? 0 : height - 1;
+    const planeY = team === "red" ? 2 : height - 2;
+    const turretY = team === "red" ? 0 : height;
     for (let i = 0; i < planeCount; i += 1) {
       const x = evenPoint(i, planeCount, width);
       tokens.push({
@@ -110,13 +110,13 @@ function newState() {
 }
 
 function evenPoint(index, count, width) {
-  return clamp(Math.round(((index + 1) * (width - 1)) / (count + 1)), 0, width - 1);
+  return clamp(Math.round(((index + 1) * width) / (count + 1)), 0, width);
 }
 
 function turretPoint(index, count, width) {
-  const center = (width - 1) / 2;
+  const center = width / 2;
   if (count === 1) return Math.round(center);
-  return clamp(Math.round(center + (index === 0 ? -2 : 2)), 0, width - 1);
+  return clamp(Math.round(center + (index === 0 ? -2 : 2)), 0, width);
 }
 
 function clamp(value, min, max) {
@@ -338,8 +338,8 @@ function boundaryImpactPoint(start, end) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const candidates = [];
-  const maxX = state.width - 1;
-  const maxY = state.height - 1;
+  const maxX = state.width;
+  const maxY = state.height;
 
   if (dx !== 0) {
     candidates.push((0 - start.x) / dx, (maxX - start.x) / dx);
@@ -357,13 +357,13 @@ function boundaryImpactPoint(start, end) {
 }
 
 function nearestBoundaryPoint(point) {
-  const x = clamp(point.x, 0, state.width - 1);
-  const y = clamp(point.y, 0, state.height - 1);
+  const x = clamp(point.x, 0, state.width);
+  const y = clamp(point.y, 0, state.height);
   const distances = [
     { x: 0, y, d: Math.abs(x - 0) },
-    { x: state.width - 1, y, d: Math.abs(x - (state.width - 1)) },
+    { x: state.width, y, d: Math.abs(x - state.width) },
     { x, y: 0, d: Math.abs(y - 0) },
-    { x, y: state.height - 1, d: Math.abs(y - (state.height - 1)) },
+    { x, y: state.height, d: Math.abs(y - state.height) },
   ];
   distances.sort((a, b) => a.d - b.d);
   return { x: distances[0].x, y: distances[0].y };
@@ -374,11 +374,11 @@ function lastHistoryPoint(token) {
 }
 
 function outside(token) {
-  return token.x < 0 || token.y < 0 || token.x >= state.width || token.y >= state.height;
+  return token.x < 0 || token.y < 0 || token.x > state.width || token.y > state.height;
 }
 
 function inside(point) {
-  return point.x >= 0 && point.y >= 0 && point.x < state.width && point.y < state.height;
+  return point.x >= 0 && point.y >= 0 && point.x <= state.width && point.y <= state.height;
 }
 
 function isGridPoint(point) {
@@ -389,8 +389,8 @@ function insideBoundary(point) {
   const epsilon = 0.000001;
   return point.x >= -epsilon
     && point.y >= -epsilon
-    && point.x <= state.width - 1 + epsilon
-    && point.y <= state.height - 1 + epsilon;
+    && point.x <= state.width + epsilon
+    && point.y <= state.height + epsilon;
 }
 
 function distance(a, b) {
@@ -447,9 +447,9 @@ function boardGeometry() {
   }
 
   const padding = 28 * dpr;
-  const cell = Math.min((width - padding * 2) / (state.width - 1), (height - padding * 2) / (state.height - 1));
-  const gridWidth = cell * (state.width - 1);
-  const gridHeight = cell * (state.height - 1);
+  const cell = Math.min((width - padding * 2) / state.width, (height - padding * 2) / state.height);
+  const gridWidth = cell * state.width;
+  const gridHeight = cell * state.height;
   return {
     dpr,
     cell,
@@ -463,7 +463,7 @@ function boardGeometry() {
 function gridToPixel(point, geo) {
   return {
     x: geo.left + point.x * geo.cell,
-    y: geo.top + (state.height - 1 - point.y) * geo.cell,
+    y: geo.top + (state.height - point.y) * geo.cell,
   };
 }
 
@@ -474,7 +474,7 @@ function eventToGrid(event) {
   const py = (event.clientY - rect.top) * geo.dpr;
   return {
     x: Math.round((px - geo.left) / geo.cell),
-    y: Math.round(state.height - 1 - (py - geo.top) / geo.cell),
+    y: Math.round(state.height - (py - geo.top) / geo.cell),
   };
 }
 
@@ -498,27 +498,27 @@ function drawPaper(geo) {
   ctx.fillRect(0, 0, geo.width, geo.height);
   ctx.lineWidth = Math.max(1, geo.dpr);
 
-  for (let x = 0; x < state.width; x += 1) {
+  for (let x = 0; x <= state.width; x += 1) {
     const point = gridToPixel({ x, y: 0 }, geo);
     ctx.strokeStyle = x % 4 === 0 ? "#8fb0d9" : "#c8d5e7";
     ctx.beginPath();
     ctx.moveTo(point.x, geo.top);
-    ctx.lineTo(point.x, geo.top + (state.height - 1) * geo.cell);
+    ctx.lineTo(point.x, geo.top + state.height * geo.cell);
     ctx.stroke();
   }
 
-  for (let y = 0; y < state.height; y += 1) {
+  for (let y = 0; y <= state.height; y += 1) {
     const point = gridToPixel({ x: 0, y }, geo);
     ctx.strokeStyle = y % 4 === 0 ? "#8fb0d9" : "#c8d5e7";
     ctx.beginPath();
     ctx.moveTo(geo.left, point.y);
-    ctx.lineTo(geo.left + (state.width - 1) * geo.cell, point.y);
+    ctx.lineTo(geo.left + state.width * geo.cell, point.y);
     ctx.stroke();
   }
 
   ctx.strokeStyle = "#24364f";
   ctx.lineWidth = 2 * geo.dpr;
-  ctx.strokeRect(geo.left, geo.top, (state.width - 1) * geo.cell, (state.height - 1) * geo.cell);
+  ctx.strokeRect(geo.left, geo.top, state.width * geo.cell, state.height * geo.cell);
 }
 
 function drawTrajectories(geo) {
