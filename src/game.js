@@ -300,7 +300,7 @@ function resolveForcedCrashes() {
     const token = activeToken();
     if (!token || token.type !== "plane") return;
 
-    const hasInsideMove = legalMoves(token).some((move) => inside(move));
+    const hasInsideMove = legalMoves(token).some((move) => inside(move, true));
     if (hasInsideMove) return;
 
     const before = snapshotTokens();
@@ -390,10 +390,16 @@ function lastHistoryPoint(token) {
 }
 
 function outside(token) {
+  if (token.type === "plane") {
+    return token.x <= 0 || token.y <= 0 || token.x >= state.width || token.y >= state.height;
+  }
   return token.x < 0 || token.y < 0 || token.x > state.width || token.y > state.height;
 }
 
-function inside(point) {
+function inside(point, isPlane = false) {
+  if (isPlane) {
+    return point.x > 0 && point.y > 0 && point.x < state.width && point.y < state.height;
+  }
   return point.x >= 0 && point.y >= 0 && point.x <= state.width && point.y <= state.height;
 }
 
@@ -930,7 +936,7 @@ function scheduleComputerMove() {
 
 function chooseComputerMove(token) {
   const moves = legalMoves(token);
-  const insideMoves = moves.filter((move) => inside(move));
+  const insideMoves = moves.filter((move) => inside(move, token.type === "plane"));
   const candidates = insideMoves.length ? insideMoves : moves;
 
   let best = candidates[0];
@@ -953,7 +959,7 @@ function chooseComputerMove(token) {
 function scoreComputerPlaneMove(token, move) {
   const enemies = state.tokens.filter((target) => target.alive && target.team !== token.team);
   const enemyTurrets = enemies.filter((target) => target.type === "turret");
-  let score = inside(move) ? 0 : -100000;
+  let score = inside(move, true) ? 0 : -100000;
 
   for (const target of enemies) {
     const d = distancePoints(move, target);
@@ -972,7 +978,7 @@ function scoreComputerPlaneMove(token, move) {
 }
 
 function scoreComputerTurretMove(token, move) {
-  if (!inside(move)) return -100000;
+  if (!inside(move, false)) return -100000;
   const enemyPlanes = state.tokens.filter((target) => target.alive && target.team !== token.team && target.type === "plane");
   if (!enemyPlanes.length) return 0;
 
