@@ -6,6 +6,7 @@ const controls = {
   height: document.querySelector("#fieldHeight"),
   planes: document.querySelector("#planeCount"),
   turrets: document.querySelector("#turretCount"),
+  obstacles: document.querySelector("#obstacles"),
   metric: document.querySelector("#metric"),
   blueControl: document.querySelector("#blueControl"),
   newGame: document.querySelector("#newGame"),
@@ -36,6 +37,12 @@ const TEAM = {
 
 const HIT_RADIUS = 1;
 const TURRET_RADIUS = 5;
+const OBSTACLE_CONFIGS = {
+  none: { density: 0, minSize: 0, maxSize: 0 },
+  big: { density: 2, minSize: 9, maxSize: 25 },
+  small: { density: 5, minSize: 3, maxSize: 8 },
+  any: { density: 4, minSize: 3, maxSize: 25 }
+};
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
 const REPLAY_ANIMATION_MS = 220;
@@ -102,11 +109,82 @@ function newState() {
     }
   }
 
+  const startingPoints = [];
+  for (const team of ["red", "blue"]) {
+    const planeY = team === "red" ? 2 : height - 2;
+    const turretY = team === "red" ? 0 : height;
+    for (let i = 0; i < planeCount; i += 1) {
+      startingPoints.push({ x: evenPoint(i, planeCount, width), y: planeY });
+    }
+    for (let i = 0; i < turretCount; i += 1) {
+      startingPoints.push({ x: turretPoint(i, turretCount, width), y: turretY });
+    }
+  }
+
+  const isSafeCell = (cx, cy) => {
+    return startingPoints.every((pt) => {
+      const dx = Math.abs(pt.x - (cx + 0.5));
+      const dy = Math.abs(pt.y - (cy + 0.5));
+      return Math.max(dx, dy) >= 2.5;
+    });
+  };
+
+  const obstacles = new Set();
+  const obstacleType = controls.obstacles.value;
+  const config = OBSTACLE_CONFIGS[obstacleType] || OBSTACLE_CONFIGS.none;
+
+  if (config.density > 0) {
+    const totalCells = width * height;
+    const expectedBlobs = (config.density * totalCells) / 1000;
+    const numBlobs = Math.max(1, Math.round(expectedBlobs + (Math.random() - 0.5) * (expectedBlobs * 0.4)));
+
+    for (let b = 0; b < numBlobs; b += 1) {
+      let seed = null;
+      for (let attempts = 0; attempts < 150; attempts += 1) {
+        const sx = Math.floor(Math.random() * width);
+        const sy = Math.floor(Math.random() * height);
+        if (!obstacles.has(`${sx},${sy}`) && isSafeCell(sx, sy)) {
+          seed = { x: sx, y: sy };
+          break;
+        }
+      }
+      if (!seed) continue;
+
+      const blob = new Set([`${seed.x},${seed.y}`]);
+      obstacles.add(`${seed.x},${seed.y}`);
+
+      const targetSize = Math.floor(Math.random() * (config.maxSize - config.minSize + 1)) + config.minSize;
+      while (blob.size < targetSize) {
+        const neighbors = [];
+        for (const key of blob) {
+          const [cx, cy] = key.split(",").map(Number);
+          const dirs = [{ x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 1 }];
+          for (const d of dirs) {
+            const nx = cx + d.x;
+            const ny = cy + d.y;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const nkey = `${nx},${ny}`;
+              if (!obstacles.has(nkey) && isSafeCell(nx, ny)) {
+                neighbors.push(nkey);
+              }
+            }
+          }
+        }
+        if (neighbors.length === 0) break;
+        const chosen = neighbors[Math.floor(Math.random() * neighbors.length)];
+        blob.add(chosen);
+        obstacles.add(chosen);
+      }
+    }
+  }
+
   return {
     width,
     height,
     metric: controls.metric.value,
     tokens,
+    obstacles,
+    obstacleType,
     turn: "red",
     activeId: null,
     moves: [],
@@ -198,13 +276,22 @@ function moveToken(destination) {
     if (outside(token)) {
       smashPlaneAtBoundary(token, start, move);
       token.boundaryCrash = true;
+    } else if (pathIntersectsObstacles(start, move)) {
+      smashPlaneAtObstacle(token, start, move);
+      token.obstacleCrash = true;
     } else {
       token.history.push({ x: token.x, y: token.y });
+    }
+  } else if (token.type === "turret") {
+    if (outside(token)) {
+      token.boundaryCrash = true;
+    } else if (pathIntersectsObstacles(start, move)) {
+      token.obstacleCrash = true;
     }
   }
   token.movedThisTurn = true;
 
-  const eliminated = resolveCombat(token);
+  const eliminated = resolveCombat(token, start);
   const after = snapshotTokens();
   const moveRecord = {
     before,
@@ -238,14 +325,35 @@ function moveToken(destination) {
   scheduleComputerMove();
 }
 
-function resolveCombat(mover) {
+function resolveCombat(mover, start) {
   const eliminated = [];
 
-  if (mover.type === "plane" && mover.boundaryCrash) {
+  // Trajectory-based collisions with other tokens
+  for (const target of state.tokens) {
+    if (!target.alive || target.id === mover.id) continue;
+    if (pointOnSegment(target, start, { x: mover.x, y: mover.y })) {
+      eliminate(mover, eliminated);
+      eliminate(target, eliminated);
+    }
+  }
+
+  if (mover.boundaryCrash) {
     eliminate(mover, eliminated);
     delete mover.boundaryCrash;
-  } else if (mover.type === "plane" && outside(mover)) {
-    smashPlaneAtBoundary(mover, lastHistoryPoint(mover), mover);
+  } else if (outside(mover)) {
+    if (mover.type === "plane") {
+      smashPlaneAtBoundary(mover, lastHistoryPoint(mover), mover);
+    }
+    eliminate(mover, eliminated);
+  }
+
+  if (mover.obstacleCrash) {
+    eliminate(mover, eliminated);
+    delete mover.obstacleCrash;
+  } else if (pathIntersectsObstacles(start, { x: mover.x, y: mover.y })) {
+    if (mover.type === "plane") {
+      smashPlaneAtObstacle(mover, start, { x: mover.x, y: mover.y });
+    }
     eliminate(mover, eliminated);
   }
 
@@ -292,6 +400,17 @@ function resolvePlaneStackCollisions(eliminated) {
   }
 }
 
+function isSafePlaneMove(token, start, move) {
+  if (!inside(move, true)) return false;
+  if (pathIntersectsObstacles(start, move)) return false;
+  for (const target of state.tokens) {
+    if (target.alive && target.id !== token.id) {
+      if (pointOnSegment(target, start, move)) return false;
+    }
+  }
+  return true;
+}
+
 function resolveForcedCrashes() {
   let changed = true;
 
@@ -300,13 +419,25 @@ function resolveForcedCrashes() {
     const token = activeToken();
     if (!token || token.type !== "plane") return;
 
-    const hasInsideMove = legalMoves(token).some((move) => inside(move, true));
-    if (hasInsideMove) return;
+    const start = { x: token.x, y: token.y };
+    const hasSafeMove = legalMoves(token).some((move) => isSafePlaneMove(token, start, move));
+    if (hasSafeMove) return;
 
     const before = snapshotTokens();
-    const start = { x: token.x, y: token.y };
     const intended = { x: token.x + token.vx, y: token.y + token.vy };
-    smashPlaneAtBoundary(token, start, intended);
+
+    const boundaryImpact = boundaryImpactPoint(start, intended);
+    const obstacleImpact = obstacleImpactPoint(start, intended);
+    const dB = distancePoints(start, boundaryImpact);
+    const dO = distancePoints(start, obstacleImpact);
+
+    let hitObstacle = false;
+    if (pathIntersectsObstacles(start, intended) && dO < dB) {
+      smashPlaneAtObstacle(token, start, intended);
+      hitObstacle = true;
+    } else {
+      smashPlaneAtBoundary(token, start, intended);
+    }
     token.movedThisTurn = true;
 
     const eliminated = [];
@@ -322,7 +453,11 @@ function resolveForcedCrashes() {
       gameOver: false,
     };
     state.moves.push(moveRecord);
-    labels.message.textContent = `${TEAM[token.team].name} plane had no in-field move and crashed on the boundary.`;
+    
+    const msg = hitObstacle
+      ? `${TEAM[token.team].name} plane had no safe move and crashed into an obstacle.`
+      : `${TEAM[token.team].name} plane had no safe move and crashed on the boundary.`;
+    labels.message.textContent = msg;
 
     checkWin();
     moveRecord.gameOver = state.gameOver;
@@ -413,6 +548,130 @@ function insideBoundary(point) {
     && point.y >= -epsilon
     && point.x <= state.width + epsilon
     && point.y <= state.height + epsilon;
+}
+
+function segmentIntersectsCell(start, end, cx, cy) {
+  const x0 = start.x;
+  const y0 = start.y;
+  const x1 = end.x;
+  const y1 = end.y;
+
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+
+  let txMin = -Infinity, txMax = Infinity;
+  if (dx === 0) {
+    if (x0 < cx || x0 > cx + 1) return false;
+  } else {
+    const t1 = (cx - x0) / dx;
+    const t2 = (cx + 1 - x0) / dx;
+    txMin = Math.min(t1, t2);
+    txMax = Math.max(t1, t2);
+  }
+
+  let tyMin = -Infinity, tyMax = Infinity;
+  if (dy === 0) {
+    if (y0 < cy || y0 > cy + 1) return false;
+  } else {
+    const t1 = (cy - y0) / dy;
+    const t2 = (cy + 1 - y0) / dy;
+    tyMin = Math.min(t1, t2);
+    tyMax = Math.max(t1, t2);
+  }
+
+  const tStart = Math.max(txMin, tyMin, 0);
+  const tEnd = Math.min(txMax, tyMax, 1);
+
+  return tStart <= tEnd;
+}
+
+function pathIntersectsObstacles(start, end) {
+  if (!state.obstacles || !state.obstacles.size) return false;
+  for (const key of state.obstacles) {
+    const [cx, cy] = key.split(",").map(Number);
+    if (segmentIntersectsCell(start, end, cx, cy)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pointOnSegment(p, start, end) {
+  const crossProduct = (p.x - start.x) * (end.y - start.y) - (p.y - start.y) * (end.x - start.x);
+  if (Math.abs(crossProduct) > 0.000001) return false;
+
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+
+  return p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
+}
+
+function obstacleImpactPoint(start, end) {
+  if (!state.obstacles || !state.obstacles.size) return end;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  let minT = 1.0;
+  let found = false;
+
+  for (const key of state.obstacles) {
+    const [cx, cy] = key.split(",").map(Number);
+    const x0 = start.x;
+    const y0 = start.y;
+
+    let txMin = -Infinity, txMax = Infinity;
+    if (dx === 0) {
+      if (x0 >= cx && x0 <= cx + 1) {
+        txMin = -Infinity;
+        txMax = Infinity;
+      } else continue;
+    } else {
+      const t1 = (cx - x0) / dx;
+      const t2 = (cx + 1 - x0) / dx;
+      txMin = Math.min(t1, t2);
+      txMax = Math.max(t1, t2);
+    }
+
+    let tyMin = -Infinity, tyMax = Infinity;
+    if (dy === 0) {
+      if (y0 >= cy && y0 <= cy + 1) {
+        tyMin = -Infinity;
+        tyMax = Infinity;
+      } else continue;
+    } else {
+      const t1 = (cy - y0) / dy;
+      const t2 = (cy + 1 - y0) / dy;
+      tyMin = Math.min(t1, t2);
+      tyMax = Math.max(t1, t2);
+    }
+
+    const tStart = Math.max(txMin, tyMin, 0);
+    const tEnd = Math.min(txMax, tyMax, 1);
+
+    if (tStart <= tEnd) {
+      if (tStart < minT) {
+        minT = tStart;
+        found = true;
+      }
+    }
+  }
+
+  if (found) {
+    return { x: start.x + dx * minT, y: start.y + dy * minT };
+  }
+  return end;
+}
+
+function smashPlaneAtObstacle(token, start, end) {
+  const impact = obstacleImpactPoint(start, end);
+  token.x = impact.x;
+  token.y = impact.y;
+
+  const last = lastHistoryPoint(token);
+  if (!last || last.x !== impact.x || last.y !== impact.y) {
+    token.history.push({ x: impact.x, y: impact.y });
+  }
 }
 
 function distance(a, b) {
@@ -603,6 +862,7 @@ function draw() {
   const geo = boardGeometry();
   ctx.clearRect(0, 0, geo.width, geo.height);
   drawPaper(geo);
+  drawObstacles(geo);
   drawTrajectories(geo);
   drawHighlights(geo);
   drawLasers(geo);
@@ -640,6 +900,36 @@ function drawPaper(geo) {
   ctx.strokeStyle = "#24364f";
   ctx.lineWidth = 2 * geo.dpr;
   ctx.strokeRect(geo.left, geo.top, state.width * geo.cell, state.height * geo.cell);
+}
+
+function drawObstacles(geo) {
+  if (!state.obstacles || !state.obstacles.size) return;
+  ctx.save();
+  ctx.fillStyle = "rgba(71, 85, 105, 0.08)";
+  ctx.strokeStyle = "#64748b";
+  ctx.lineWidth = 1 * geo.dpr;
+
+  for (const key of state.obstacles) {
+    const [cx, cy] = key.split(",").map(Number);
+    const x = geo.left + cx * geo.cell;
+    const y = geo.top + (state.height - 1 - cy) * geo.cell;
+
+    ctx.fillRect(x, y, geo.cell, geo.cell);
+    ctx.strokeRect(x, y, geo.cell, geo.cell);
+
+    ctx.beginPath();
+    ctx.moveTo(x, y + geo.cell);
+    ctx.lineTo(x + geo.cell, y);
+
+    ctx.moveTo(x, y + geo.cell / 2);
+    ctx.lineTo(x + geo.cell / 2, y);
+
+    ctx.moveTo(x + geo.cell / 2, y + geo.cell);
+    ctx.lineTo(x + geo.cell, y + geo.cell / 2);
+
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawTrajectories(geo) {
@@ -957,9 +1247,19 @@ function chooseComputerMove(token) {
 }
 
 function scoreComputerPlaneMove(token, move) {
+  const start = { x: token.x, y: token.y };
+  if (!inside(move, true)) return -100000;
+  if (pathIntersectsObstacles(start, move)) return -100000;
+
+  for (const target of state.tokens) {
+    if (target.alive && target.id !== token.id) {
+      if (pointOnSegment(target, start, move)) return -100000;
+    }
+  }
+
   const enemies = state.tokens.filter((target) => target.alive && target.team !== token.team);
   const enemyTurrets = enemies.filter((target) => target.type === "turret");
-  let score = inside(move, true) ? 0 : -100000;
+  let score = 0;
 
   for (const target of enemies) {
     const d = distancePoints(move, target);
@@ -978,7 +1278,16 @@ function scoreComputerPlaneMove(token, move) {
 }
 
 function scoreComputerTurretMove(token, move) {
+  const start = { x: token.x, y: token.y };
   if (!inside(move, false)) return -100000;
+  if (pathIntersectsObstacles(start, move)) return -100000;
+
+  for (const target of state.tokens) {
+    if (target.alive && target.id !== token.id) {
+      if (pointOnSegment(target, start, move)) return -100000;
+    }
+  }
+
   const enemyPlanes = state.tokens.filter((target) => target.alive && target.team !== token.team && target.type === "plane");
   if (!enemyPlanes.length) return 0;
 
