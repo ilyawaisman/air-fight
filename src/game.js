@@ -102,6 +102,7 @@ function newState() {
     activeId: null,
     moves: [],
     explosions: [],
+    lasers: [],
     gameOver: false,
     replaying: false,
     aiTeam: controls.blueControl.value === "computer" ? "blue" : null,
@@ -178,6 +179,7 @@ function moveToken(destination) {
   }
 
   const before = snapshotTokens();
+  state.pendingShots = [];
   const start = { x: token.x, y: token.y };
   token.x = move.x;
   token.y = move.y;
@@ -200,6 +202,7 @@ function moveToken(destination) {
     after,
     tokenId: token.id,
     eliminated,
+    shots: [...state.pendingShots],
     turn: state.turn,
     gameOver: false,
   };
@@ -252,6 +255,10 @@ function resolveCombat(mover) {
       if (!turret.alive || turret.type !== "turret" || turret.team === plane.team) continue;
       if (distance(plane, turret) <= TURRET_RADIUS) {
         eliminate(plane, eliminated);
+        const shot = { fromX: turret.x, fromY: turret.y, toX: plane.x, toY: plane.y, color: TEAM[turret.team].color };
+        if (!state.pendingShots) state.pendingShots = [];
+        state.pendingShots.push(shot);
+        addLaserShot(shot.fromX, shot.fromY, shot.toX, shot.toY, shot.color);
         break;
       }
     }
@@ -436,6 +443,18 @@ function addExplosion(x, y, color) {
   state.explosions.push({ x, y, color, born: performance.now() });
 }
 
+function addLaserShot(fromX, fromY, toX, toY, color) {
+  if (!state.lasers) state.lasers = [];
+  state.lasers.push({
+    fromX,
+    fromY,
+    toX,
+    toY,
+    color,
+    born: performance.now(),
+  });
+}
+
 function boardGeometry() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -485,10 +504,11 @@ function draw() {
   drawPaper(geo);
   drawTrajectories(geo);
   drawHighlights(geo);
+  drawLasers(geo);
   drawTokens(geo);
   drawExplosions(geo);
 
-  if (state.explosions.length) {
+  if (state.explosions.length || (state.lasers && state.lasers.length)) {
     replayFrame = requestAnimationFrame(draw);
   }
 }
@@ -686,6 +706,61 @@ function drawExplosions(geo) {
   }
 }
 
+function drawLasers(geo) {
+  if (!state.lasers || !state.lasers.length) return;
+  const now = performance.now();
+  state.lasers = state.lasers.filter((laser) => now - laser.born < 600);
+
+  ctx.save();
+  for (const laser of state.lasers) {
+    const age = now - laser.born;
+    const opacity = Math.max(0, 1 - age / 600);
+
+    const fromPx = gridToPixel({ x: laser.fromX, y: laser.fromY }, geo);
+    const toPx = gridToPixel({ x: laser.toX, y: laser.toY }, geo);
+
+    // 1. Draw the beam line
+    // The beam grows from 'from' to 'to' over the first 200ms
+    const growProgress = Math.min(1, age / 200);
+    const currentToX = fromPx.x + (toPx.x - fromPx.x) * growProgress;
+    const currentToY = fromPx.y + (toPx.y - fromPx.y) * growProgress;
+
+    ctx.strokeStyle = laser.color;
+    ctx.lineWidth = Math.max(3 * geo.dpr, geo.cell * 0.15);
+    ctx.globalAlpha = opacity * 0.4;
+    ctx.beginPath();
+    ctx.moveTo(fromPx.x, fromPx.y);
+    ctx.lineTo(currentToX, currentToY);
+    ctx.stroke();
+
+    // Inner bright core
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(1 * geo.dpr, geo.cell * 0.05);
+    ctx.globalAlpha = opacity;
+    ctx.beginPath();
+    ctx.moveTo(fromPx.x, fromPx.y);
+    ctx.lineTo(currentToX, currentToY);
+    ctx.stroke();
+
+    // 2. Draw traveling energy pulse (bolt)
+    // Bolt travels from 'from' to 'to' over the first 300ms
+    const boltProgress = Math.min(1, age / 300);
+    if (boltProgress < 1) {
+      const bx = fromPx.x + (toPx.x - fromPx.x) * boltProgress;
+      const by = fromPx.y + (toPx.y - fromPx.y) * boltProgress;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = laser.color;
+      ctx.shadowBlur = 8 * geo.dpr;
+      ctx.beginPath();
+      ctx.arc(bx, by, Math.max(4 * geo.dpr, geo.cell * 0.18), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0; // reset
+    }
+  }
+  ctx.restore();
+}
+
 function updateStatus() {
   const token = activeToken();
   labels.turn.textContent = state.gameOver ? "Finished" : TEAM[state.turn].name;
@@ -805,6 +880,7 @@ function startReplay() {
   labels.message.textContent = "Replaying the fight.";
   restoreSnapshot(moves[0].before);
   state.explosions = [];
+  state.lasers = [];
   draw();
 
   let index = 0;
@@ -863,6 +939,9 @@ function animateReplayMove(move, done) {
     for (const id of move.eliminated) {
       const token = after.find((item) => item.id === id);
       if (token) addExplosion(token.x, token.y, TEAM[token.team].color);
+    }
+    for (const shot of move.shots || []) {
+      addLaserShot(shot.fromX, shot.fromY, shot.toX, shot.toY, shot.color);
     }
     updateStatus();
     draw();
