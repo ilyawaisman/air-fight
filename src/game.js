@@ -50,7 +50,8 @@ function newState() {
   let id = 1;
 
   for (const team of ["red", "blue"]) {
-    const y = team === "red" ? 1 : height - 2;
+    const planeY = team === "red" ? 2 : height - 3;
+    const turretY = team === "red" ? 0 : height - 1;
     for (let i = 0; i < planeCount; i += 1) {
       const x = evenPoint(i, planeCount, width);
       tokens.push({
@@ -58,10 +59,10 @@ function newState() {
         type: "plane",
         team,
         x,
-        y,
+        y: planeY,
         vx: 0,
         vy: 0,
-        history: [{ x, y }],
+        history: [{ x, y: planeY }],
         alive: true,
       });
     }
@@ -72,7 +73,7 @@ function newState() {
         type: "turret",
         team,
         x: turretPoint(i, turretCount, width),
-        y,
+        y: turretY,
         vx: 0,
         vy: 0,
         alive: true,
@@ -137,12 +138,15 @@ function legalMoves(token) {
 
   for (let dy = -1; dy <= 1; dy += 1) {
     for (let dx = -1; dx <= 1; dx += 1) {
-      moves.push({
+      const move = {
         x: anchor.x + dx,
         y: anchor.y + dy,
         ax: token.type === "plane" ? dx : 0,
         ay: token.type === "plane" ? dy : 0,
-      });
+      };
+      if (token.type !== "turret" || inside(move)) {
+        moves.push(move);
+      }
     }
   }
 
@@ -178,7 +182,15 @@ function moveToken(destination) {
 
   const eliminated = resolveCombat(token);
   const after = snapshotTokens();
-  state.moves.push({ before, after, tokenId: token.id, eliminated });
+  const moveRecord = {
+    before,
+    after,
+    tokenId: token.id,
+    eliminated,
+    turn: state.turn,
+    gameOver: false,
+  };
+  state.moves.push(moveRecord);
 
   if (!token.alive) {
     labels.message.textContent = `${TEAM[token.team].name} ${token.type} was eliminated.`;
@@ -189,6 +201,8 @@ function moveToken(destination) {
   }
 
   checkWin();
+  moveRecord.gameOver = state.gameOver;
+
   if (!state.gameOver) {
     state.activeId = nextTokenId(state.turn);
     resolveForcedCrashes();
@@ -269,10 +283,21 @@ function resolveForcedCrashes() {
     const eliminated = [];
     eliminate(token, eliminated);
     const after = snapshotTokens();
-    state.moves.push({ before, after, tokenId: token.id, eliminated, forced: true });
+    const moveRecord = {
+      before,
+      after,
+      tokenId: token.id,
+      eliminated,
+      forced: true,
+      turn: state.turn,
+      gameOver: false,
+    };
+    state.moves.push(moveRecord);
     labels.message.textContent = `${TEAM[token.team].name} plane had no in-field move and crashed on the boundary.`;
 
     checkWin();
+    moveRecord.gameOver = state.gameOver;
+
     if (!state.gameOver) state.activeId = nextTokenId(state.turn);
     changed = true;
   }
@@ -728,6 +753,15 @@ function startReplay() {
   clearTimeout(aiTimer);
   cancelAnimationFrame(replayAnimationFrame);
   state.aiThinking = false;
+
+  const savedState = {
+    tokens: snapshotTokens(),
+    turn: state.turn,
+    activeId: state.activeId,
+    gameOver: state.gameOver,
+    message: labels.message.textContent,
+  };
+
   const moves = [...state.moves];
   state.replaying = true;
   controls.replay.disabled = true;
@@ -741,6 +775,11 @@ function startReplay() {
   clearTimeout(replayTimer);
   const showNextMove = () => {
     const move = moves[index];
+    state.turn = move.turn;
+    state.activeId = move.tokenId;
+    state.gameOver = move.gameOver;
+    updateStatus();
+
     animateReplayMove(move, () => {
       index += 1;
 
@@ -748,10 +787,15 @@ function startReplay() {
         clearTimeout(replayTimer);
         cancelAnimationFrame(replayAnimationFrame);
         state.replaying = false;
+
+        restoreSnapshot(savedState.tokens);
+        state.turn = savedState.turn;
+        state.activeId = savedState.activeId;
+        state.gameOver = savedState.gameOver;
+        labels.message.textContent = savedState.message;
+
         updateReplayButton();
         controls.newGame.disabled = false;
-        labels.message.textContent = "Replay finished.";
-        state.moves = moves;
         updateStatus();
         draw();
         return;
@@ -784,6 +828,7 @@ function animateReplayMove(move, done) {
       const token = after.find((item) => item.id === id);
       if (token) addExplosion(token.x, token.y, TEAM[token.team].color);
     }
+    updateStatus();
     draw();
     done();
   };
