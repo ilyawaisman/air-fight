@@ -603,6 +603,25 @@ function pathIntersectsObstacles(start, end) {
   return false;
 }
 
+function pathIntersectsObstaclesFast(start, end, parsedObstacles) {
+  if (!parsedObstacles || !parsedObstacles.length) return false;
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+
+  for (let i = 0; i < parsedObstacles.length; i++) {
+    const obs = parsedObstacles[i];
+    if (obs.cx + 1 < minX || obs.cx > maxX || obs.cy + 1 < minY || obs.cy > maxY) {
+      continue;
+    }
+    if (segmentIntersectsCell(start, end, obs.cx, obs.cy)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function segmentIntersectsCellOpen(start, end, cx, cy) {
   const x0 = start.x;
   const y0 = start.y;
@@ -1277,6 +1296,50 @@ function scheduleComputerMove() {
   }, 420);
 }
 
+function survivalDepth(x, y, vx, vy, currentDepth, maxDepth, targetTokenId, parsedObstacles) {
+  if (currentDepth === maxDepth) {
+    return maxDepth;
+  }
+
+  let maxChildDepth = currentDepth;
+
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const nvx = vx + dx;
+      const nvy = vy + dy;
+      const nx = x + nvx;
+      const ny = y + nvy;
+
+      const start = { x, y };
+      const end = { x: nx, y: ny };
+
+      if (!inside(end, true)) continue;
+      if (pathIntersectsObstaclesFast(start, end, parsedObstacles)) continue;
+
+      let tokenCollision = false;
+      for (const target of state.tokens) {
+        if (target.alive && target.id !== targetTokenId) {
+          if (pointOnSegment(target, start, end)) {
+            tokenCollision = true;
+            break;
+          }
+        }
+      }
+      if (tokenCollision) continue;
+
+      const d = survivalDepth(nx, ny, nvx, nvy, currentDepth + 1, maxDepth, targetTokenId, parsedObstacles);
+      if (d > maxChildDepth) {
+        maxChildDepth = d;
+      }
+      if (maxChildDepth === maxDepth) {
+        return maxDepth;
+      }
+    }
+  }
+
+  return maxChildDepth;
+}
+
 function chooseComputerMove(token) {
   const moves = legalMoves(token);
   const insideMoves = moves.filter((move) => inside(move, token.type === "plane"));
@@ -1285,10 +1348,19 @@ function chooseComputerMove(token) {
   let best = candidates[0];
   let bestScore = -Infinity;
 
+  // Pre-parse obstacles once per turn to optimize lookahead path finding
+  const parsedObstacles = [];
+  if (state.obstacles && state.obstacles.size) {
+    for (const key of state.obstacles) {
+      const [cx, cy] = key.split(",").map(Number);
+      parsedObstacles.push({ cx, cy });
+    }
+  }
+
   for (const move of candidates) {
     const score = token.type === "plane"
-      ? scoreComputerPlaneMove(token, move)
-      : scoreComputerTurretMove(token, move);
+      ? scoreComputerPlaneMove(token, move, parsedObstacles)
+      : scoreComputerTurretMove(token, move, parsedObstacles);
 
     if (score > bestScore) {
       bestScore = score;
@@ -1299,10 +1371,10 @@ function chooseComputerMove(token) {
   return best;
 }
 
-function scoreComputerPlaneMove(token, move) {
+function scoreComputerPlaneMove(token, move, parsedObstacles) {
   const start = { x: token.x, y: token.y };
   if (!inside(move, true)) return -100000;
-  if (pathIntersectsObstacles(start, move)) return -100000;
+  if (pathIntersectsObstaclesFast(start, move, parsedObstacles)) return -100000;
 
   for (const target of state.tokens) {
     if (target.alive && target.id !== token.id) {
@@ -1327,13 +1399,21 @@ function scoreComputerPlaneMove(token, move) {
   const nextVx = token.vx + move.ax;
   const nextVy = token.vy + move.ay;
   score -= 0.08 * (nextVx * nextVx + nextVy * nextVy);
+
+  // Look ahead 3 steps to see if this velocity/position will force a crash.
+  // Apply a severe penalty if survival is short-lived.
+  const steps = survivalDepth(move.x, move.y, nextVx, nextVy, 1, 3, token.id, parsedObstacles);
+  if (steps < 3) {
+    score -= (3 - steps) * 25000;
+  }
+
   return score;
 }
 
-function scoreComputerTurretMove(token, move) {
+function scoreComputerTurretMove(token, move, parsedObstacles) {
   const start = { x: token.x, y: token.y };
   if (!inside(move, false)) return -100000;
-  if (pathIntersectsObstacles(start, move)) return -100000;
+  if (pathIntersectsObstaclesFast(start, move, parsedObstacles)) return -100000;
 
   for (const target of state.tokens) {
     if (target.alive && target.id !== token.id) {
