@@ -370,7 +370,7 @@ button:disabled {
     display: flex !important;
     flex-direction: column !important;
     flex: 1 !important;
-    height: auto !important;
+    min-height: 0 !important;
     padding: 0 !important;
     gap: 0 !important;
     overflow: hidden !important;

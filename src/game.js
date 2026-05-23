@@ -1926,7 +1926,6 @@ document.querySelectorAll(".preset-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     controls.width.value = btn.dataset.w;
     controls.height.value = btn.dataset.h;
-    resetGame();
   });
 });
 window.addEventListener("resize", draw);
