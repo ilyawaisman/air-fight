@@ -585,6 +585,7 @@ button:disabled {
     display: flex !important;
     align-items: center;
     justify-content: space-between;
+    width: 100% !important;
     height: 56px;
     min-height: 56px !important;
     flex-shrink: 0 !important;

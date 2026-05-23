@@ -1976,7 +1976,9 @@ if (settingsBackdrop) {
 }
 
 // Mobile Touch Swipe Handling
-canvas.addEventListener("touchstart", (event) => {
+const swipeTarget = document.getElementById("boardContainer") || canvas;
+
+swipeTarget.addEventListener("touchstart", (event) => {
   if (!state || state.replaying || state.aiThinking) return;
 
   if (!state.gameOver) {
@@ -1991,7 +1993,7 @@ canvas.addEventListener("touchstart", (event) => {
   state.draggedMove = null;
 });
 
-canvas.addEventListener("touchmove", (event) => {
+swipeTarget.addEventListener("touchmove", (event) => {
   if (!isSwiping) return;
 
   if (event.cancelable) {
@@ -2053,7 +2055,7 @@ canvas.addEventListener("touchmove", (event) => {
   }
 });
 
-canvas.addEventListener("touchend", (event) => {
+swipeTarget.addEventListener("touchend", (event) => {
   if (!isSwiping) return;
   isSwiping = false;
 
