@@ -377,6 +377,10 @@ button:disabled {
     grid-template-columns: 1fr !important;
   }
 
+  .board-container {
+    min-height: 0 !important;
+  }
+
   .mobile-top-bar {
     display: flex !important;
     align-items: center;

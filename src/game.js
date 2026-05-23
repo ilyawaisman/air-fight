@@ -1042,25 +1042,13 @@ function draw() {
   drawTokens(geo);
   drawExplosions(geo);
 
-  const mobileTurnEl = document.querySelector("#mobileTurn");
-  if (mobileTurnEl) {
-    mobileTurnEl.textContent = state.gameOver ? "Finished" : TEAM[state.turn].name + "'s Turn";
-    mobileTurnEl.style.color = state.gameOver ? "var(--muted)" : TEAM[state.turn].color;
+  const mobileRedStatsEl = document.querySelector("#mobileRedStats");
+  if (mobileRedStatsEl) {
+    mobileRedStatsEl.textContent = `R: ${aliveSummaryCompact("red")}`;
   }
-  const mobileStatsEl = document.querySelector("#mobileStats");
-  if (mobileStatsEl) {
-    if (state.gameOver) {
-      mobileStatsEl.textContent = ` — R: ${aliveSummaryCompact("red")} | B: ${aliveSummaryCompact("blue")}`;
-    } else {
-      const token = activeToken();
-      const velStr = token && token.type === "plane" ? `(${token.vx}, ${token.vy})` : "";
-      const velText = velStr ? ` ${velStr} — ` : ` — `;
-      mobileStatsEl.textContent = `${velText}R: ${aliveSummaryCompact("red")} | B: ${aliveSummaryCompact("blue")}`;
-    }
-  }
-  const mobileMessageEl = document.querySelector("#mobileMessage");
-  if (mobileMessageEl) {
-    mobileMessageEl.textContent = labels.message.textContent;
+  const mobileBlueStatsEl = document.querySelector("#mobileBlueStats");
+  if (mobileBlueStatsEl) {
+    mobileBlueStatsEl.textContent = `B: ${aliveSummaryCompact("blue")}`;
   }
 
   if (state.explosions.length || (state.lasers && state.lasers.length)) {
