@@ -11,7 +11,7 @@
     <main class="app">
       <section class="control-panel" aria-label="Game controls">
         <div class="brand">
-          <h1>Air Fight <span class="version">v1.2.1</span></h1>
+          <h1>Air Fight <span class="version">v1.2.2</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -88,14 +88,27 @@
             </select>
           </label>
 
-          <label class="checkbox-label">
-            <input id="keepMap" type="checkbox">
-            Keep same map on restart
-          </label>
+          <div class="map-option-group" role="radiogroup" aria-label="Map preservation on restart">
+            <span class="group-title">Restart map</span>
+            <div class="radio-segmented">
+              <label>
+                <input type="radio" name="mapOption" value="new" checked>
+                <span>New</span>
+              </label>
+              <label>
+                <input type="radio" name="mapOption" value="keep">
+                <span>Keep</span>
+              </label>
+              <label>
+                <input type="radio" name="mapOption" value="swap">
+                <span>Swap</span>
+              </label>
+            </div>
+          </div>
 
           <div class="buttons">
-            <button id="newGame" type="button">New fight</button>
-            <button id="replay" type="button">Replay fight</button>
+            <button id="newGame" type="button">New</button>
+            <button id="replay" type="button">Replay</button>
           </div>
         </div>
       </section>

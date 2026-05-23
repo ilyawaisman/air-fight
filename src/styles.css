@@ -160,29 +160,63 @@ select {
   background: #e2e8f0 !important;
 }
 
-.checkbox-label {
-  display: flex !important;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
-  cursor: pointer;
-  margin-top: 10px;
-  margin-bottom: 2px;
-  font-weight: 700;
-  user-select: none;
+.map-option-group {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 4px;
 }
 
-.checkbox-label input[type="checkbox"] {
-  width: 16px !important;
-  min-height: 16px !important;
-  height: 16px !important;
-  cursor: pointer;
-  margin: 0;
-  padding: 0;
-  border-radius: 4px;
-  accent-color: #223a5f;
+.group-title {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
+
+.radio-segmented {
+  display: flex;
+  background: #edf2f7;
+  border-radius: 6px;
+  padding: 3px;
+  border: 1px solid var(--border);
+}
+
+.radio-segmented label {
+  flex: 1;
+  text-align: center;
+  cursor: pointer;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block;
+}
+
+.radio-segmented input[type="radio"] {
+  display: none !important;
+}
+
+.radio-segmented label span {
+  display: block;
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.radio-segmented label:hover span {
+  color: var(--ink);
+}
+
+.radio-segmented input[type="radio"]:checked + span {
+  background: #ffffff;
+  color: #223a5f;
+  box-shadow: 0 1.5px 4px rgba(0, 0, 0, 0.1);
+}
+
 
 .buttons {
   display: grid;

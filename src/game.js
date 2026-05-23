@@ -10,7 +10,7 @@ const controls = {
   metric: document.querySelector("#metric"),
   blueControl: document.querySelector("#blueControl"),
   replaySpeed: document.querySelector("#replaySpeed"),
-  keepMap: document.querySelector("#keepMap"),
+  mapOption: document.getElementsByName("mapOption"),
   newGame: document.querySelector("#newGame"),
   replay: document.querySelector("#replay"),
 };
@@ -148,9 +148,21 @@ function newState() {
   const config = OBSTACLE_CONFIGS[obstacleType] || OBSTACLE_CONFIGS.none;
   let mapKept = false;
 
-  if (state && controls.keepMap && controls.keepMap.checked && state.width === width && state.height === height && state.obstacleType === obstacleType) {
-    obstacles = new Set(state.obstacles);
-    mapKept = true;
+  const mapOpt = Array.from(controls.mapOption).find((r) => r.checked)?.value || "new";
+
+  if (state && state.width === width && state.height === height && state.obstacleType === obstacleType) {
+    if (mapOpt === "keep") {
+      obstacles = new Set(state.obstacles);
+      mapKept = true;
+    } else if (mapOpt === "swap" && state.obstacles) {
+      for (const key of state.obstacles) {
+        const [cx, cy] = key.split(",").map(Number);
+        const rx = (width - 1) - cx;
+        const ry = (height - 1) - cy;
+        obstacles.add(`${rx},${ry}`);
+      }
+      mapKept = true;
+    }
   } else if (config.density > 0) {
     const totalCells = width * height;
     const expectedBlobs = (config.density * totalCells) / 1000;
@@ -1425,10 +1437,10 @@ function updateStatus() {
 function updateReplayButton() {
   const suffix = hasKeyboard() ? " (R)" : "";
   if (state.replaying) {
-    controls.replay.textContent = "Stop replay" + suffix;
+    controls.replay.textContent = "Stop" + suffix;
     controls.replay.disabled = false;
   } else {
-    controls.replay.textContent = "Replay fight" + suffix;
+    controls.replay.textContent = "Replay" + suffix;
     controls.replay.disabled = state.moves.length === 0;
   }
 }
@@ -1766,7 +1778,7 @@ function resetGame() {
   updateReplayButton();
 
   const suffix = hasKeyboard() ? " (N)" : "";
-  controls.newGame.textContent = "New fight" + suffix;
+  controls.newGame.textContent = "New" + suffix;
   controls.newGame.disabled = false;
 
   updateStatus();
