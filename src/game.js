@@ -1977,10 +1977,12 @@ if (settingsBackdrop) {
 
 // Mobile Touch Swipe Handling
 canvas.addEventListener("touchstart", (event) => {
-  if (!state || state.replaying || state.gameOver || state.aiThinking) return;
+  if (!state || state.replaying || state.aiThinking) return;
 
-  const token = activeToken();
-  if (!token || token.team === state.aiTeam) return;
+  if (!state.gameOver) {
+    const token = activeToken();
+    if (!token || token.team === state.aiTeam) return;
+  }
 
   const touch = event.touches[0];
   touchStartX = touch.clientX;
@@ -1995,6 +1997,8 @@ canvas.addEventListener("touchmove", (event) => {
   if (event.cancelable) {
     event.preventDefault();
   }
+
+  if (state.gameOver) return;
 
   const token = activeToken();
   if (!token) return;
@@ -2053,13 +2057,26 @@ canvas.addEventListener("touchend", (event) => {
   if (!isSwiping) return;
   isSwiping = false;
 
-  const token = activeToken();
-  if (!token) return;
-
   const touch = event.changedTouches[0];
   const dx = touch.clientX - touchStartX;
   const dy = touch.clientY - touchStartY;
   const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (state.gameOver) {
+    if (dist >= 30) {
+      if (Math.abs(dy) > Math.abs(dx)) {
+        if (dy > 0) {
+          resetGame(); // Swipe down -> New game
+        } else {
+          startReplay(); // Swipe up -> Replay
+        }
+      }
+    }
+    return;
+  }
+
+  const token = activeToken();
+  if (!token) return;
 
   if (dist < 15) {
     // Treat as direct tap
