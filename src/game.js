@@ -9,6 +9,7 @@ const controls = {
   obstacles: document.querySelector("#obstacles"),
   metric: document.querySelector("#metric"),
   blueControl: document.querySelector("#blueControl"),
+  replaySpeed: document.querySelector("#replaySpeed"),
   newGame: document.querySelector("#newGame"),
   replay: document.querySelector("#replay"),
 };
@@ -39,9 +40,9 @@ const HIT_RADIUS = 1;
 const TURRET_RADIUS = 5;
 const OBSTACLE_CONFIGS = {
   none: { density: 0, minSize: 0, maxSize: 0 },
-  big: { density: 3, minSize: 9, maxSize: 25 },
-  small: { density: 7.5, minSize: 3, maxSize: 8 },
-  any: { density: 6, minSize: 3, maxSize: 25 }
+  big: { density: 3, minSize: 20, maxSize: 40 },
+  small: { density: 7.5, minSize: 3, maxSize: 10 },
+  any: { density: 6, minSize: 3, maxSize: 40 }
 };
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
@@ -65,6 +66,7 @@ let replayFrame = null;
 let replayAnimationFrame = null;
 let aiTimer = 0;
 let endGameUITimer = 0;
+let savedReplayState = null;
 
 function newState() {
   const width = clamp(Number(controls.width.value) || 24, 12, 80);
@@ -181,6 +183,77 @@ function newState() {
         const chosen = neighbors[Math.floor(Math.random() * neighbors.length)];
         blob.add(chosen);
         obstacles.add(chosen);
+      }
+    }
+
+    if (obstacles.size > 0) {
+      const cells = [];
+      let sumX = 0;
+      let sumY = 0;
+      let minCx = Infinity, maxCx = -Infinity;
+      let minCy = Infinity, maxCy = -Infinity;
+
+      for (const key of obstacles) {
+        const [cx, cy] = key.split(",").map(Number);
+        cells.push({ x: cx, y: cy });
+        sumX += cx;
+        sumY += cy;
+        if (cx < minCx) minCx = cx;
+        if (cx > maxCx) maxCx = cx;
+        if (cy < minCy) minCy = cy;
+        if (cy > maxCy) maxCy = cy;
+      }
+
+      const N = cells.length;
+      const mx = sumX / N;
+      const my = sumY / N;
+
+      const fieldCx = (width - 1) / 2;
+      const fieldCy = (height - 1) / 2;
+
+      const minTx = 3 - minCx;
+      const maxTx = width - 4 - maxCx;
+      const minTy = 3 - minCy;
+      const maxTy = height - 4 - maxCy;
+
+      let bestTx = 0;
+      let bestTy = 0;
+      let minSquareDist = Infinity;
+
+      for (let tx = minTx; tx <= maxTx; tx++) {
+        for (let ty = minTy; ty <= maxTy; ty++) {
+          let isTxTySafe = true;
+          for (let i = 0; i < cells.length; i++) {
+            const nx = cells[i].x + tx;
+            const ny = cells[i].y + ty;
+            if (!isSafeCell(nx, ny)) {
+              isTxTySafe = false;
+              break;
+            }
+          }
+          if (!isTxTySafe) continue;
+
+          const shiftedMx = mx + tx;
+          const shiftedMy = my + ty;
+          const dx = shiftedMx - fieldCx;
+          const dy = shiftedMy - fieldCy;
+          const squareDist = dx * dx + dy * dy;
+
+          if (squareDist < minSquareDist) {
+            minSquareDist = squareDist;
+            bestTx = tx;
+            bestTy = ty;
+          }
+        }
+      }
+
+      if (bestTx !== 0 || bestTy !== 0) {
+        obstacles.clear();
+        for (let i = 0; i < cells.length; i++) {
+          const nx = cells[i].x + bestTx;
+          const ny = cells[i].y + bestTy;
+          obstacles.add(`${nx},${ny}`);
+        }
       }
     }
   }
@@ -369,7 +442,13 @@ function resolveCombat(mover, start) {
   if (mover.alive && mover.type === "plane") {
     for (const target of state.tokens) {
       if (!target.alive || target.team === mover.team) continue;
-      if (distance(mover, target) <= HIT_RADIUS) eliminate(target, eliminated);
+      if (distance(mover, target) <= HIT_RADIUS) {
+        eliminate(target, eliminated);
+        const shot = { fromX: mover.x, fromY: mover.y, toX: target.x, toY: target.y, color: TEAM[mover.team].color };
+        if (!state.pendingShots) state.pendingShots = [];
+        state.pendingShots.push(shot);
+        addLaserShot(shot.fromX, shot.fromY, shot.toX, shot.toY, shot.color);
+      }
     }
   }
 
@@ -379,6 +458,7 @@ function resolveCombat(mover, start) {
       if (!turret.alive || turret.type !== "turret" || turret.team === plane.team) continue;
       if (distance(plane, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(turret, plane)) {
         eliminate(plane, eliminated);
+        turret.angle = Math.atan2(-(plane.y - turret.y), plane.x - turret.x);
         const shot = { fromX: turret.x, fromY: turret.y, toX: plane.x, toY: plane.y, color: TEAM[turret.team].color };
         if (!state.pendingShots) state.pendingShots = [];
         state.pendingShots.push(shot);
@@ -755,30 +835,25 @@ function distance(a, b) {
 function checkWin() {
   if (state.gameOver) return;
 
-  const redTokens = state.tokens.some((token) => token.team === "red" && token.alive);
-  const blueTokens = state.tokens.some((token) => token.team === "blue" && token.alive);
   const redPlanes = state.tokens.some((token) => token.team === "red" && token.type === "plane" && token.alive);
   const bluePlanes = state.tokens.some((token) => token.team === "blue" && token.type === "plane" && token.alive);
 
   let outcome = null;
-  if (!redTokens || !blueTokens) {
-    state.gameOver = true;
-    state.activeId = null;
-    if (redTokens && !blueTokens) {
-      labels.message.textContent = "Red wins.";
-      outcome = "red";
-    } else if (blueTokens && !redTokens) {
-      labels.message.textContent = "Blue wins.";
-      outcome = "blue";
-    } else {
-      labels.message.textContent = "Both teams are gone.";
-      outcome = "draw";
-    }
-  } else if (!redPlanes && !bluePlanes) {
+  if (!redPlanes && !bluePlanes) {
     state.gameOver = true;
     state.activeId = null;
     labels.message.textContent = "No planes remain.";
     outcome = "draw";
+  } else if (!bluePlanes) {
+    state.gameOver = true;
+    state.activeId = null;
+    labels.message.textContent = "Red wins.";
+    outcome = "red";
+  } else if (!redPlanes) {
+    state.gameOver = true;
+    state.activeId = null;
+    labels.message.textContent = "Blue wins.";
+    outcome = "blue";
   }
 
   if (outcome) {
@@ -1193,8 +1268,12 @@ function drawPlane(p, token, geo) {
 function drawTurret(p, token, geo) {
   const color = TEAM[token.team].color;
   const size = Math.max(9 * geo.dpr, geo.cell * 0.45);
+  const defaultAngle = token.team === "red" ? -Math.PI / 2 : Math.PI / 2;
+  const angle = token.angle !== undefined ? token.angle : defaultAngle;
+
   ctx.save();
   ctx.translate(p.x, p.y);
+  ctx.rotate(angle);
   ctx.fillStyle = color;
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 1.5 * geo.dpr;
@@ -1206,7 +1285,7 @@ function drawTurret(p, token, geo) {
   ctx.lineWidth = 4 * geo.dpr;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(0, token.team === "red" ? -size * 1.15 : size * 1.15);
+  ctx.lineTo(size * 1.15, 0);
   ctx.stroke();
   ctx.restore();
 }
@@ -1335,7 +1414,13 @@ function updateStatus() {
 }
 
 function updateReplayButton() {
-  controls.replay.disabled = state.replaying || state.moves.length === 0;
+  if (state.replaying) {
+    controls.replay.textContent = "Stop replay";
+    controls.replay.disabled = false;
+  } else {
+    controls.replay.textContent = "Replay fight";
+    controls.replay.disabled = state.moves.length === 0;
+  }
 }
 
 function aliveSummary(team) {
@@ -1504,13 +1589,17 @@ function distancePoints(a, b) {
 }
 
 function startReplay() {
-  if (!state.moves.length || state.replaying) return;
+  if (!state.moves.length) return;
+  if (state.replaying) {
+    stopReplay();
+    return;
+  }
   clearTimeout(aiTimer);
   clearTimeout(endGameUITimer);
   cancelAnimationFrame(replayAnimationFrame);
   state.aiThinking = false;
 
-  const savedState = {
+  savedReplayState = {
     tokens: snapshotTokens(),
     turn: state.turn,
     activeId: state.activeId,
@@ -1521,8 +1610,8 @@ function startReplay() {
   const moves = [...state.moves];
   state.replaying = true;
   hideEndGameUI();
-  controls.replay.disabled = true;
-  controls.newGame.disabled = true;
+  updateReplayButton();
+  controls.newGame.disabled = false;
   labels.message.textContent = "Replaying the fight.";
   restoreSnapshot(moves[0].before);
   state.explosions = [];
@@ -1546,11 +1635,11 @@ function startReplay() {
         cancelAnimationFrame(replayAnimationFrame);
         state.replaying = false;
 
-        restoreSnapshot(savedState.tokens);
-        state.turn = savedState.turn;
-        state.activeId = savedState.activeId;
-        state.gameOver = savedState.gameOver;
-        labels.message.textContent = savedState.message;
+        restoreSnapshot(savedReplayState.tokens);
+        state.turn = savedReplayState.turn;
+        state.activeId = savedReplayState.activeId;
+        state.gameOver = savedReplayState.gameOver;
+        labels.message.textContent = savedReplayState.message;
 
         updateReplayButton();
         controls.newGame.disabled = false;
@@ -1563,20 +1652,47 @@ function startReplay() {
         return;
       }
 
-      replayTimer = setTimeout(showNextMove, Math.max(0, REPLAY_STEP_MS - REPLAY_ANIMATION_MS));
+      const speed = parseFloat(controls.replaySpeed.value) || 1.0;
+      replayTimer = setTimeout(showNextMove, Math.max(0, (REPLAY_STEP_MS - REPLAY_ANIMATION_MS) / speed));
     });
   };
 
   showNextMove();
 }
 
+function stopReplay() {
+  if (!state.replaying) return;
+  clearTimeout(replayTimer);
+  cancelAnimationFrame(replayAnimationFrame);
+  state.replaying = false;
+
+  if (savedReplayState) {
+    restoreSnapshot(savedReplayState.tokens);
+    state.turn = savedReplayState.turn;
+    state.activeId = savedReplayState.activeId;
+    state.gameOver = savedReplayState.gameOver;
+    labels.message.textContent = savedReplayState.message;
+  }
+
+  updateReplayButton();
+  controls.newGame.disabled = false;
+  updateStatus();
+  draw();
+
+  if (state.gameOver) {
+    showPersistentBannerOnly();
+  }
+}
+
 function animateReplayMove(move, done) {
   const started = performance.now();
   const before = move.before;
   const after = move.after;
+  const speed = parseFloat(controls.replaySpeed.value) || 1.0;
+  const animMs = REPLAY_ANIMATION_MS / speed;
 
   const tick = (now) => {
-    const progress = Math.min(1, (now - started) / REPLAY_ANIMATION_MS);
+    const progress = Math.min(1, (now - started) / animMs);
     state.tokens = interpolateSnapshots(before, after, progress);
     draw();
 
@@ -1611,6 +1727,16 @@ function interpolateSnapshots(before, after, progress) {
       y: beforeToken.y + (afterToken.y - beforeToken.y) * progress,
       history: afterToken.history ? afterToken.history.map((point) => ({ ...point })) : undefined,
     };
+
+    if (afterToken.type === "turret") {
+      const beforeAngle = beforeToken.angle !== undefined ? beforeToken.angle : (beforeToken.team === "red" ? -Math.PI / 2 : Math.PI / 2);
+      const afterAngle = afterToken.angle !== undefined ? afterToken.angle : (afterToken.team === "red" ? -Math.PI / 2 : Math.PI / 2);
+      let diff = afterAngle - beforeAngle;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      token.angle = beforeAngle + diff * progress;
+    }
+
     if (progress < 1 && beforeToken.alive) token.alive = true;
     return token;
   });
@@ -1653,8 +1779,6 @@ endGame.overlay.addEventListener("click", () => {
 });
 
 window.addEventListener("keydown", (event) => {
-  if (!state || state.replaying || state.gameOver || state.aiThinking) return;
-
   // Prevent controls interaction conflicts (e.g. typing in width/height input fields)
   if (
     document.activeElement &&
@@ -1663,6 +1787,30 @@ window.addEventListener("keydown", (event) => {
   ) {
     return;
   }
+
+  // Hotkeys:
+  // N: New fight (resetGame)
+  if ((event.key === "n" || event.key === "N") && (!state || !state.replaying)) {
+    event.preventDefault();
+    resetGame();
+    return;
+  }
+
+  // R: Replay fight (startReplay)
+  if ((event.key === "r" || event.key === "R") && state && !state.replaying && !controls.replay.disabled) {
+    event.preventDefault();
+    startReplay();
+    return;
+  }
+
+  // Space: Dismiss game over overlay
+  if (event.code === "Space" && state && state.gameOver) {
+    event.preventDefault();
+    showPersistentBannerOnly();
+    return;
+  }
+
+  if (!state || state.replaying || state.gameOver || state.aiThinking) return;
 
   const token = activeToken();
   if (!token || token.team === state.aiTeam) return;
@@ -1693,6 +1841,13 @@ window.addEventListener("keydown", (event) => {
 controls.newGame.addEventListener("click", resetGame);
 controls.replay.addEventListener("click", startReplay);
 controls.blueControl.addEventListener("change", resetGame);
+document.querySelectorAll(".preset-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    controls.width.value = btn.dataset.w;
+    controls.height.value = btn.dataset.h;
+    resetGame();
+  });
+});
 window.addEventListener("resize", draw);
 
 resetGame();

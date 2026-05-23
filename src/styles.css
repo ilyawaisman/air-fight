@@ -130,6 +130,36 @@ select {
   color: var(--muted);
 }
 
+.field-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.preset-btn {
+  min-height: 28px !important;
+  font-size: 11px;
+  font-weight: 600 !important;
+  border-radius: 4px !important;
+  border: 1px solid var(--border) !important;
+  background: #f6f9fc !important;
+  color: var(--ink) !important;
+  cursor: pointer;
+  padding: 0 4px !important;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.preset-btn:hover {
+  background: #eef2f7 !important;
+  border-color: #bac7d8 !important;
+}
+
+.preset-btn:active {
+  background: #e2e8f0 !important;
+}
+
 .buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -147,7 +177,7 @@ button {
   font-weight: 800;
 }
 
-button:first-child {
+.buttons button:first-child {
   color: #fff;
   background: #223a5f;
   border-color: #223a5f;

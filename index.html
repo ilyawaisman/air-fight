@@ -11,7 +11,7 @@
     <main class="app">
       <section class="control-panel" aria-label="Game controls">
         <div class="brand">
-          <h1>Air Fight <span class="version">v1.1.4</span></h1>
+          <h1>Air Fight <span class="version">v1.2.0</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -22,6 +22,12 @@
               <input id="fieldWidth" type="number" min="12" max="80" value="24" aria-label="Field width">
               <span>x</span>
               <input id="fieldHeight" type="number" min="16" max="96" value="48" aria-label="Field height">
+            </span>
+            <span class="field-presets">
+              <button type="button" class="preset-btn" data-w="12" data-h="16">12x16</button>
+              <button type="button" class="preset-btn" data-w="24" data-h="24">24x24</button>
+              <button type="button" class="preset-btn" data-w="24" data-h="48">24x48</button>
+              <button type="button" class="preset-btn" data-w="80" data-h="96">80x96</button>
             </span>
           </label>
 
@@ -69,6 +75,16 @@
             <select id="blueControl">
               <option value="human" selected>Human</option>
               <option value="computer">Computer</option>
+            </select>
+          </label>
+
+          <label>
+            Replay speed
+            <select id="replaySpeed">
+              <option value="1" selected>1x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+              <option value="8">8x</option>
             </select>
           </label>
 
