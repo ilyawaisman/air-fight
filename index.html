@@ -8,10 +8,25 @@
     <link rel="stylesheet" href="./src/styles.css">
   </head>
   <body>
+    <div id="settingsBackdrop" class="settings-backdrop"></div>
+    <div class="mobile-top-bar">
+      <div class="mobile-brand">Air Fight <span class="version">v1.3.0</span></div>
+      <div class="mobile-status">
+        <span id="mobileTurn">Red</span>'s turn — <span id="mobileMsg">Choose move</span>
+      </div>
+      <button id="toggleSettings" class="settings-toggle-btn" type="button" aria-label="Settings">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="2"/>
+          <circle cx="12" cy="12" r="2"/>
+          <circle cx="12" cy="19" r="2"/>
+        </svg>
+      </button>
+    </div>
     <main class="app">
       <section class="control-panel" aria-label="Game controls">
+        <button id="closeSettings" class="close-btn" type="button" aria-label="Close settings">&times;</button>
         <div class="brand">
-          <h1>Air Fight <span class="version">v1.2.3</span></h1>
+          <h1>Air Fight <span class="version">v1.3.0</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -107,8 +122,8 @@
           </div>
 
           <div class="buttons">
-            <button id="newGame" type="button">New</button>
-            <button id="replay" type="button">Replay</button>
+            <button id="newGame" class="new-game-btn" type="button">New</button>
+            <button id="replay" class="replay-btn" type="button">Replay</button>
           </div>
         </div>
       </section>
@@ -149,6 +164,25 @@
           </div>
           <p id="message" class="message">Choose one highlighted point.</p>
         </aside>
+
+        <div class="mobile-action-bar">
+          <button class="new-game-btn" type="button">New</button>
+          <div class="radio-segmented compact" role="radiogroup" aria-label="Map preservation on restart mobile">
+            <label>
+              <input type="radio" name="mapOptionMobile" value="new" checked>
+              <span>New</span>
+            </label>
+            <label>
+              <input type="radio" name="mapOptionMobile" value="keep">
+              <span>Keep</span>
+            </label>
+            <label>
+              <input type="radio" name="mapOptionMobile" value="swap">
+              <span>Swap</span>
+            </label>
+          </div>
+          <button class="replay-btn" type="button">Replay</button>
+        </div>
       </section>
     </main>
 

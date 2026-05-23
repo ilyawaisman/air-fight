@@ -11,8 +11,8 @@ const controls = {
   blueControl: document.querySelector("#blueControl"),
   replaySpeed: document.querySelector("#replaySpeed"),
   mapOption: document.getElementsByName("mapOption"),
-  newGame: document.querySelector("#newGame"),
-  replay: document.querySelector("#replay"),
+  newGame: document.querySelectorAll(".new-game-btn"),
+  replay: document.querySelectorAll(".replay-btn"),
 };
 
 const labels = {
@@ -1039,6 +1039,16 @@ function draw() {
   drawTokens(geo);
   drawExplosions(geo);
 
+  const mobileTurnEl = document.querySelector("#mobileTurn");
+  if (mobileTurnEl) {
+    mobileTurnEl.textContent = state.gameOver ? "Finished" : TEAM[state.turn].name;
+    mobileTurnEl.style.color = state.gameOver ? "var(--muted)" : TEAM[state.turn].color;
+  }
+  const mobileMsgEl = document.querySelector("#mobileMsg");
+  if (mobileMsgEl) {
+    mobileMsgEl.textContent = labels.message.textContent;
+  }
+
   if (state.explosions.length || (state.lasers && state.lasers.length)) {
     replayFrame = requestAnimationFrame(draw);
   }
@@ -1155,10 +1165,22 @@ function drawHighlights(geo) {
 
   for (const move of moves) {
     const p = gridToPixel(move, geo);
-    ctx.fillStyle = TEAM[token.team].pale;
+    const isDragged = state.draggedMove && state.draggedMove.x === move.x && state.draggedMove.y === move.y;
+
+    ctx.fillStyle = isDragged ? TEAM[token.team].color : TEAM[token.team].pale;
+    ctx.globalAlpha = isDragged ? 0.35 : 1.0;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, Math.max(5 * geo.dpr, geo.cell * 0.35), 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, Math.max(5 * geo.dpr, geo.cell * 0.35) * (isDragged ? 1.25 : 1), 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1.0;
+
+    if (isDragged) {
+      ctx.strokeStyle = TEAM[token.team].color;
+      ctx.lineWidth = 2.5 * geo.dpr;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(5 * geo.dpr, geo.cell * 0.35) * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     const dx = move.x - anchor.x;
     const dy = move.y - anchor.y;
@@ -1197,6 +1219,17 @@ function drawHighlights(geo) {
   ctx.beginPath();
   ctx.arc(p.x, p.y, Math.max(7 * geo.dpr, geo.cell * 0.45), 0, Math.PI * 2);
   ctx.stroke();
+
+  if (state.draggedMove) {
+    const fromPos = gridToPixel(anchor, geo);
+    const toPos = gridToPixel(state.draggedMove, geo);
+    ctx.strokeStyle = TEAM[token.team].color;
+    ctx.lineWidth = 3 * geo.dpr;
+    ctx.beginPath();
+    ctx.moveTo(fromPos.x, fromPos.y);
+    ctx.lineTo(toPos.x, toPos.y);
+    ctx.stroke();
+  }
 
   ctx.restore();
 }
@@ -1439,11 +1472,15 @@ function updateStatus() {
 function updateReplayButton() {
   const suffix = hasKeyboard() ? " (R)" : "";
   if (state.replaying) {
-    controls.replay.textContent = "Stop" + suffix;
-    controls.replay.disabled = false;
+    controls.replay.forEach((b) => {
+      b.textContent = "Stop" + suffix;
+      b.disabled = false;
+    });
   } else {
-    controls.replay.textContent = "Replay" + suffix;
-    controls.replay.disabled = state.moves.length === 0;
+    controls.replay.forEach((b) => {
+      b.textContent = "Replay" + suffix;
+      b.disabled = state.moves.length === 0;
+    });
   }
 }
 
@@ -1635,7 +1672,7 @@ function startReplay() {
   state.replaying = true;
   hideEndGameUI();
   updateReplayButton();
-  controls.newGame.disabled = false;
+  controls.newGame.forEach((b) => b.disabled = false);
   labels.message.textContent = "Replaying the fight.";
   restoreSnapshot(moves[0].before);
   state.explosions = [];
@@ -1666,7 +1703,7 @@ function startReplay() {
         labels.message.textContent = savedReplayState.message;
 
         updateReplayButton();
-        controls.newGame.disabled = false;
+        controls.newGame.forEach((b) => b.disabled = false);
         updateStatus();
         draw();
 
@@ -1699,7 +1736,7 @@ function stopReplay() {
   }
 
   updateReplayButton();
-  controls.newGame.disabled = false;
+  controls.newGame.forEach((b) => b.disabled = false);
   updateStatus();
   draw();
 
@@ -1780,8 +1817,10 @@ function resetGame() {
   updateReplayButton();
 
   const suffix = hasKeyboard() ? " (N)" : "";
-  controls.newGame.textContent = "New" + suffix;
-  controls.newGame.disabled = false;
+  controls.newGame.forEach((b) => {
+    b.textContent = "New" + suffix;
+    b.disabled = false;
+  });
 
   updateStatus();
   draw();
@@ -1825,7 +1864,7 @@ window.addEventListener("keydown", (event) => {
   }
 
   // R: Replay fight (startReplay)
-  if ((event.key === "r" || event.key === "R") && state && !state.replaying && !controls.replay.disabled) {
+  if ((event.key === "r" || event.key === "R") && state && !state.replaying && !controls.replay[0].disabled) {
     event.preventDefault();
     startReplay();
     return;
@@ -1866,8 +1905,8 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-controls.newGame.addEventListener("click", resetGame);
-controls.replay.addEventListener("click", startReplay);
+controls.newGame.forEach((b) => b.addEventListener("click", resetGame));
+controls.replay.forEach((b) => b.addEventListener("click", startReplay));
 controls.blueControl.addEventListener("change", () => {
   if (state) {
     state.aiTeam = controls.blueControl.value === "computer" ? "blue" : null;
@@ -1882,5 +1921,23 @@ document.querySelectorAll(".preset-btn").forEach((btn) => {
   });
 });
 window.addEventListener("resize", draw);
+
+// Map Options Synchronizer
+const syncMapOptions = (sourceName, targetName) => {
+  const source = document.getElementsByName(sourceName);
+  const target = document.getElementsByName(targetName);
+  const val = Array.from(source).find((r) => r.checked)?.value;
+  if (val) {
+    const match = Array.from(target).find((r) => r.value === val);
+    if (match) match.checked = true;
+  }
+};
+
+document.getElementsByName("mapOption").forEach((r) => {
+  r.addEventListener("change", () => syncMapOptions("mapOption", "mapOptionMobile"));
+});
+document.getElementsByName("mapOptionMobile").forEach((r) => {
+  r.addEventListener("change", () => syncMapOptions("mapOptionMobile", "mapOption"));
+});
 
 resetGame();
