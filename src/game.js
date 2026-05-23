@@ -1103,10 +1103,64 @@ function drawHighlights(geo) {
   ctx.restore();
 }
 
+function drawActiveHighlight(p, token, geo) {
+  const size = token.type === "plane"
+    ? Math.max(10 * geo.dpr, geo.cell * 0.52)
+    : Math.max(9 * geo.dpr, geo.cell * 0.45);
+
+  const r = size * 1.5;
+  const len = size * 0.45;
+
+  ctx.save();
+  ctx.strokeStyle = TEAM[token.team].color;
+  ctx.lineWidth = 1.8 * geo.dpr;
+
+  // Top-Left Bracket
+  ctx.beginPath();
+  ctx.moveTo(p.x - r, p.y - r + len);
+  ctx.lineTo(p.x - r, p.y - r);
+  ctx.lineTo(p.x - r + len, p.y - r);
+  ctx.stroke();
+
+  // Top-Right Bracket
+  ctx.beginPath();
+  ctx.moveTo(p.x + r, p.y - r + len);
+  ctx.lineTo(p.x + r, p.y - r);
+  ctx.lineTo(p.x + r - len, p.y - r);
+  ctx.stroke();
+
+  // Bottom-Left Bracket
+  ctx.beginPath();
+  ctx.moveTo(p.x - r, p.y + r - len);
+  ctx.lineTo(p.x - r, p.y + r);
+  ctx.lineTo(p.x - r + len, p.y + r);
+  ctx.stroke();
+
+  // Bottom-Right Bracket
+  ctx.beginPath();
+  ctx.moveTo(p.x + r, p.y + r - len);
+  ctx.lineTo(p.x + r, p.y + r);
+  ctx.lineTo(p.x + r - len, p.y + r);
+  ctx.stroke();
+
+  // Draw a subtle background highlight fill behind active token
+  ctx.fillStyle = TEAM[token.team].color;
+  ctx.globalAlpha = 0.08;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r * 0.85, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function drawTokens(geo) {
+  const active = activeToken();
   for (const token of state.tokens) {
     if (!token.alive || outside(token)) continue;
     const p = gridToPixel(token, geo);
+    if (active && active.id === token.id && !state.replaying) {
+      drawActiveHighlight(p, token, geo);
+    }
     if (token.type === "plane") drawPlane(p, token, geo);
     else drawTurret(p, token, geo);
   }
