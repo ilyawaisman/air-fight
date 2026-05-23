@@ -470,6 +470,12 @@ button:disabled {
     color: var(--ink) !important;
   }
 
+  /* Hide redundant actions from the side panel on mobile */
+  .control-panel .map-option-group,
+  .control-panel .buttons {
+    display: none !important;
+  }
+
   /* Control Panel as a sliding drawer */
   .control-panel {
     position: fixed !important;
