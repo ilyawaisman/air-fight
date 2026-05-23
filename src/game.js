@@ -1868,7 +1868,12 @@ window.addEventListener("keydown", (event) => {
 
 controls.newGame.addEventListener("click", resetGame);
 controls.replay.addEventListener("click", startReplay);
-controls.blueControl.addEventListener("change", resetGame);
+controls.blueControl.addEventListener("change", () => {
+  if (state) {
+    state.aiTeam = controls.blueControl.value === "computer" ? "blue" : null;
+    scheduleComputerMove();
+  }
+});
 document.querySelectorAll(".preset-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     controls.width.value = btn.dataset.w;
