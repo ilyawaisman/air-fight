@@ -873,12 +873,12 @@ function checkWin() {
   } else if (!bluePlanes) {
     state.gameOver = true;
     state.activeId = null;
-    labels.message.textContent = "Red wins.";
+    labels.message.textContent = "Red won.";
     outcome = "red";
   } else if (!redPlanes) {
     state.gameOver = true;
     state.activeId = null;
-    labels.message.textContent = "Blue wins.";
+    labels.message.textContent = "Blue won.";
     outcome = "blue";
   }
 
@@ -900,19 +900,19 @@ function triggerEndGameUI(outcome) {
   if (outcome === "red") {
     endGame.overlayTitle.textContent = "Red Wins";
     endGame.overlayTitle.className = "winner-red";
-    endGame.bannerText.textContent = "🏆 Red Team Wins — Game Over";
+    endGame.bannerText.textContent = "🏆 Red Team Won";
     endGame.banner.className = "end-game-banner active banner-red";
     endGame.container.classList.add("winner-red");
   } else if (outcome === "blue") {
     endGame.overlayTitle.textContent = "Blue Wins";
     endGame.overlayTitle.className = "winner-blue";
-    endGame.bannerText.textContent = "🏆 Blue Team Wins — Game Over";
+    endGame.bannerText.textContent = "🏆 Blue Team Won";
     endGame.banner.className = "end-game-banner active banner-blue";
     endGame.container.classList.add("winner-blue");
   } else {
     endGame.overlayTitle.textContent = "Draw";
     endGame.overlayTitle.className = "winner-draw";
-    endGame.bannerText.textContent = "🤝 Draw — Game Over";
+    endGame.bannerText.textContent = "🤝 Draw";
     endGame.banner.className = "end-game-banner active banner-draw";
     endGame.container.classList.add("winner-draw");
   }
@@ -950,11 +950,11 @@ function showPersistentBannerOnly() {
   endGame.banner.className = `end-game-banner active banner-${outcome} no-delay`;
 
   if (outcome === "red") {
-    endGame.bannerText.textContent = "🏆 Red Team Wins — Game Over";
+    endGame.bannerText.textContent = "🏆 Red Team Won";
   } else if (outcome === "blue") {
-    endGame.bannerText.textContent = "🏆 Blue Team Wins — Game Over";
+    endGame.bannerText.textContent = "🏆 Blue Team Won";
   } else {
-    endGame.bannerText.textContent = "🤝 Draw — Game Over";
+    endGame.bannerText.textContent = "🤝 Draw";
   }
 }
 
