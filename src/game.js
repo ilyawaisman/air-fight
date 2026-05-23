@@ -68,6 +68,9 @@ let replayAnimationFrame = null;
 let aiTimer = 0;
 let endGameUITimer = 0;
 let savedReplayState = null;
+let touchStartX = 0;
+let touchStartY = 0;
+let isSwiping = false;
 
 function hasKeyboard() {
   return !window.matchMedia("(pointer: coarse)").matches;
@@ -1041,12 +1044,25 @@ function draw() {
 
   const mobileTurnEl = document.querySelector("#mobileTurn");
   if (mobileTurnEl) {
-    mobileTurnEl.textContent = state.gameOver ? "Finished" : TEAM[state.turn].name;
+    mobileTurnEl.textContent = state.gameOver ? "Finished" : TEAM[state.turn].name + "'s Turn";
     mobileTurnEl.style.color = state.gameOver ? "var(--muted)" : TEAM[state.turn].color;
   }
-  const mobileMsgEl = document.querySelector("#mobileMsg");
-  if (mobileMsgEl) {
-    mobileMsgEl.textContent = labels.message.textContent;
+  const mobileVelEl = document.querySelector("#mobileVel");
+  if (mobileVelEl) {
+    const token = activeToken();
+    mobileVelEl.textContent = token && token.type === "plane" ? `(${token.vx}, ${token.vy})` : "(0, 0)";
+  }
+  const mobileRedAliveEl = document.querySelector("#mobileRedAlive");
+  if (mobileRedAliveEl) {
+    mobileRedAliveEl.textContent = `R: ${aliveSummaryCompact("red")}`;
+  }
+  const mobileBlueAliveEl = document.querySelector("#mobileBlueAlive");
+  if (mobileBlueAliveEl) {
+    mobileBlueAliveEl.textContent = `B: ${aliveSummaryCompact("blue")}`;
+  }
+  const mobileMessageEl = document.querySelector("#mobileMessage");
+  if (mobileMessageEl) {
+    mobileMessageEl.textContent = labels.message.textContent;
   }
 
   if (state.explosions.length || (state.lasers && state.lasers.length)) {
@@ -1490,6 +1506,12 @@ function aliveSummary(team) {
   return `${planes} planes, ${turrets} turrets`;
 }
 
+function aliveSummaryCompact(team) {
+  const planes = state.tokens.filter((token) => token.team === team && token.type === "plane" && token.alive).length;
+  const turrets = state.tokens.filter((token) => token.team === team && token.type === "turret" && token.alive).length;
+  return `${planes}P, ${turrets}T`;
+}
+
 function scheduleComputerMove() {
   if (state.gameOver || state.replaying || state.aiThinking || !state.aiTeam) return;
 
@@ -1804,6 +1826,7 @@ function interpolateSnapshots(before, after, progress) {
 }
 
 function resetGame() {
+  if (typeof hideMobileSettings === "function") hideMobileSettings();
   clearTimeout(replayTimer);
   clearTimeout(aiTimer);
   clearTimeout(endGameUITimer);
@@ -1938,6 +1961,150 @@ document.getElementsByName("mapOption").forEach((r) => {
 });
 document.getElementsByName("mapOptionMobile").forEach((r) => {
   r.addEventListener("change", () => syncMapOptions("mapOptionMobile", "mapOption"));
+});
+
+// Mobile Drawer Toggles
+const toggleSettingsBtn = document.querySelector("#toggleSettings");
+const closeSettingsBtn = document.querySelector("#closeSettings");
+const settingsBackdrop = document.querySelector("#settingsBackdrop");
+const controlPanel = document.querySelector(".control-panel");
+
+function hideMobileSettings() {
+  if (controlPanel && settingsBackdrop) {
+    controlPanel.classList.remove("open");
+    settingsBackdrop.classList.remove("active");
+  }
+}
+
+if (toggleSettingsBtn && controlPanel && settingsBackdrop) {
+  toggleSettingsBtn.addEventListener("click", () => {
+    controlPanel.classList.add("open");
+    settingsBackdrop.classList.add("active");
+  });
+}
+
+if (closeSettingsBtn) {
+  closeSettingsBtn.addEventListener("click", hideMobileSettings);
+}
+if (settingsBackdrop) {
+  settingsBackdrop.addEventListener("click", hideMobileSettings);
+}
+
+// Mobile Touch Swipe Handling
+canvas.addEventListener("touchstart", (event) => {
+  if (!state || state.replaying || state.gameOver || state.aiThinking) return;
+
+  const token = activeToken();
+  if (!token || token.team === state.aiTeam) return;
+
+  const touch = event.touches[0];
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+  isSwiping = true;
+  state.draggedMove = null;
+});
+
+canvas.addEventListener("touchmove", (event) => {
+  if (!isSwiping) return;
+
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+
+  const token = activeToken();
+  if (!token) return;
+
+  const touch = event.touches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  const moves = legalMoves(token);
+  const anchor = token.type === "plane"
+    ? { x: token.x + token.vx, y: token.y + token.vy }
+    : { x: token.x, y: token.y };
+
+  let moveOffset = { dx: 0, dy: 0 };
+  if (dist >= 30) {
+    const angle = Math.atan2(-dy, dx);
+    const octant = Math.round(angle / (Math.PI / 4));
+    if (octant === 0) {
+      moveOffset = { dx: 1, dy: 0 };
+    } else if (octant === 1) {
+      moveOffset = { dx: 1, dy: 1 };
+    } else if (octant === 2) {
+      moveOffset = { dx: 0, dy: 1 };
+    } else if (octant === 3) {
+      moveOffset = { dx: -1, dy: 1 };
+    } else if (octant === 4 || octant === -4) {
+      moveOffset = { dx: -1, dy: 0 };
+    } else if (octant === -3) {
+      moveOffset = { dx: -1, dy: -1 };
+    } else if (octant === -2) {
+      moveOffset = { dx: 0, dy: -1 };
+    } else if (octant === -1) {
+      moveOffset = { dx: 1, dy: -1 };
+    }
+  }
+
+  const targetX = anchor.x + moveOffset.dx;
+  const targetY = anchor.y + moveOffset.dy;
+
+  const matchedMove = moves.find((m) => m.x === targetX && m.y === targetY);
+  if (matchedMove) {
+    if (!state.draggedMove || state.draggedMove.x !== matchedMove.x || state.draggedMove.y !== matchedMove.y) {
+      state.draggedMove = matchedMove;
+      draw();
+    }
+  } else {
+    if (state.draggedMove) {
+      state.draggedMove = null;
+      draw();
+    }
+  }
+});
+
+canvas.addEventListener("touchend", (event) => {
+  if (!isSwiping) return;
+  isSwiping = false;
+
+  const token = activeToken();
+  if (!token) return;
+
+  const touch = event.changedTouches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist < 15) {
+    // Treat as direct tap
+    const rect = canvas.getBoundingClientRect();
+    const tapEvent = {
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+    };
+    const tapGrid = eventToGrid(tapEvent);
+    const moves = legalMoves(token);
+    const matched = moves.find((m) => m.x === tapGrid.x && m.y === tapGrid.y);
+    if (matched) {
+      if (event.cancelable) event.preventDefault();
+      moveToken(matched);
+    }
+  } else {
+    // Swipe
+    if (event.cancelable) event.preventDefault();
+    if (state.draggedMove) {
+      moveToken(state.draggedMove);
+    }
+  }
+  state.draggedMove = null;
+  draw();
+});
+
+canvas.addEventListener("touchcancel", () => {
+  isSwiping = false;
+  state.draggedMove = null;
+  draw();
 });
 
 resetGame();

@@ -10,9 +10,16 @@
   <body>
     <div id="settingsBackdrop" class="settings-backdrop"></div>
     <div class="mobile-top-bar">
-      <div class="mobile-brand">Air Fight <span class="version">v1.3.0</span></div>
-      <div class="mobile-status">
-        <span id="mobileTurn">Red</span>'s turn — <span id="mobileMsg">Choose move</span>
+      <div class="mobile-brand">Air Fight <span class="version">v1.3.1</span></div>
+      <div class="mobile-status-container">
+        <div class="mobile-status-row">
+          <span id="mobileTurn">Red</span> <span id="mobileVel">(0, 0)</span>
+        </div>
+        <div class="mobile-stats-row">
+          <span id="mobileRedAlive" class="team-red-stats">R: 0P, 0T</span>
+          <span class="stat-divider">|</span>
+          <span id="mobileBlueAlive" class="team-blue-stats">B: 0P, 0T</span>
+        </div>
       </div>
       <button id="toggleSettings" class="settings-toggle-btn" type="button" aria-label="Settings">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -26,7 +33,7 @@
       <section class="control-panel" aria-label="Game controls">
         <button id="closeSettings" class="close-btn" type="button" aria-label="Close settings">&times;</button>
         <div class="brand">
-          <h1>Air Fight <span class="version">v1.3.0</span></h1>
+          <h1>Air Fight <span class="version">v1.3.1</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -131,6 +138,7 @@
       <section class="board-wrap" aria-label="Air Fight board">
         <div class="board-container" id="boardContainer">
           <canvas id="board" width="1000" height="1600" tabindex="0"></canvas>
+          <div id="mobileMessage" class="mobile-message-banner">Choose one highlighted point.</div>
           <div id="endGameOverlay" class="end-game-overlay">
             <div class="overlay-content">
               <h2 id="overlayTitle"></h2>
@@ -186,6 +194,6 @@
       </section>
     </main>
 
-    <script src="./src/game.js?v=5"></script>
+    <script src="./src/game.js?v=1.3.1"></script>
   </body>
 </html>
