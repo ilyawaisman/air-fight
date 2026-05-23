@@ -163,7 +163,9 @@ function newState() {
       }
       mapKept = true;
     }
-  } else if (config.density > 0) {
+  }
+
+  if (!mapKept && config.density > 0) {
     const totalCells = width * height;
     const expectedBlobs = (config.density * totalCells) / 1000;
     const numBlobs = Math.max(1, Math.round(expectedBlobs + (Math.random() - 0.5) * (expectedBlobs * 0.4)));
