@@ -930,13 +930,13 @@ function hideEndGameUI() {
 function showPersistentBannerOnly() {
   if (!endGame.container) return;
 
-  const redTokens = state.tokens.some((token) => token.team === "red" && token.alive);
-  const blueTokens = state.tokens.some((token) => token.team === "blue" && token.alive);
+  const redPlanes = state.tokens.some((token) => token.team === "red" && token.type === "plane" && token.alive);
+  const bluePlanes = state.tokens.some((token) => token.team === "blue" && token.type === "plane" && token.alive);
 
   let outcome = "draw";
-  if (!redTokens || !blueTokens) {
-    if (redTokens && !blueTokens) outcome = "red";
-    else if (blueTokens && !redTokens) outcome = "blue";
+  if (!redPlanes || !bluePlanes) {
+    if (redPlanes && !bluePlanes) outcome = "red";
+    else if (bluePlanes && !redPlanes) outcome = "blue";
   }
 
   endGame.overlay.classList.remove("active");
