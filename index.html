@@ -10,16 +10,9 @@
   <body>
     <div id="settingsBackdrop" class="settings-backdrop"></div>
     <div class="mobile-top-bar">
-      <div class="mobile-brand">Air Fight <span class="version">v1.3.1</span></div>
-      <div class="mobile-status-container">
-        <div class="mobile-status-row">
-          <span id="mobileTurn">Red</span> <span id="mobileVel">(0, 0)</span>
-        </div>
-        <div class="mobile-stats-row">
-          <span id="mobileRedAlive" class="team-red-stats">R: 0P, 0T</span>
-          <span class="stat-divider">|</span>
-          <span id="mobileBlueAlive" class="team-blue-stats">B: 0P, 0T</span>
-        </div>
+      <div class="mobile-brand">Air Fight <span class="version">v1.3.2</span></div>
+      <div class="mobile-status">
+        <span id="mobileTurn">Red's Turn</span><span id="mobileStats"></span>
       </div>
       <button id="toggleSettings" class="settings-toggle-btn" type="button" aria-label="Settings">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -33,7 +26,7 @@
       <section class="control-panel" aria-label="Game controls">
         <button id="closeSettings" class="close-btn" type="button" aria-label="Close settings">&times;</button>
         <div class="brand">
-          <h1>Air Fight <span class="version">v1.3.1</span></h1>
+          <h1>Air Fight <span class="version">v1.3.2</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -194,6 +187,6 @@
       </section>
     </main>
 
-    <script src="./src/game.js?v=1.3.1"></script>
+    <script src="./src/game.js?v=1.3.2"></script>
   </body>
 </html>

@@ -18,9 +18,13 @@
   box-sizing: border-box;
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100%;
   color: var(--ink);
   background:
     linear-gradient(180deg, #edf4fb 0%, #f9fbfd 42%, #eef3f0 100%);
@@ -357,13 +361,16 @@ button:disabled {
 @media (max-width: 768px) {
   body {
     overflow: hidden !important;
-    height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100dvh !important; /* Dynamic viewport height to prevent clipping */
   }
 
   .app {
     display: flex !important;
     flex-direction: column !important;
-    height: calc(100vh - 48px) !important; /* Viewport minus mobile header height */
+    flex: 1 !important;
+    height: auto !important;
     padding: 0 !important;
     gap: 0 !important;
     overflow: hidden !important;
@@ -387,6 +394,7 @@ button:disabled {
     font-weight: 800;
     color: var(--ink);
     white-space: nowrap;
+    flex-shrink: 0;
   }
   
   .mobile-brand .version {
@@ -400,56 +408,22 @@ button:disabled {
     background: rgba(0, 0, 0, 0.02);
   }
 
-  .mobile-status-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1px;
-    max-width: 55%;
-    overflow: hidden;
-  }
-
-  .mobile-status-row {
+  .mobile-status {
     font-size: 11px;
-    font-weight: 800;
-    white-space: nowrap;
-    color: var(--ink);
-  }
-
-  .mobile-status-row #mobileTurn {
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .mobile-status-row #mobileVel {
-    color: var(--muted);
-    margin-left: 3px;
-    font-family: ui-monospace, monospace;
-    font-weight: 600;
-  }
-
-  .mobile-stats-row {
-    font-size: 9px;
     font-weight: 700;
     color: var(--muted);
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    flex-grow: 1;
+    text-align: center;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 8px;
   }
 
-  .mobile-stats-row .team-red-stats {
-    color: var(--red);
-  }
-
-  .mobile-stats-row .team-blue-stats {
-    color: var(--blue);
-  }
-
-  .mobile-stats-row .stat-divider {
-    color: var(--border);
-    font-weight: 300;
+  .mobile-status #mobileTurn {
+    text-transform: uppercase;
+    color: var(--ink);
+    font-weight: 800;
   }
 
   .mobile-message-banner {
@@ -488,6 +462,7 @@ button:disabled {
     transition: background 0.2s, color 0.2s;
     min-height: unset !important;
     width: auto !important;
+    flex-shrink: 0 !important;
   }
 
   .settings-toggle-btn:hover {
