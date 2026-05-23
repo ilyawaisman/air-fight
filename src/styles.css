@@ -377,6 +377,17 @@ button:disabled {
     grid-template-columns: 1fr !important;
   }
 
+  .board-wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    align-items: stretch !important;
+  }
+
   .board-container {
     min-height: 0 !important;
   }

@@ -1044,11 +1044,11 @@ function draw() {
 
   const mobileRedStatsEl = document.querySelector("#mobileRedStats");
   if (mobileRedStatsEl) {
-    mobileRedStatsEl.textContent = `R: ${aliveSummaryCompact("red")}`;
+    mobileRedStatsEl.textContent = `Red: ${aliveSummaryCompact("red")}`;
   }
   const mobileBlueStatsEl = document.querySelector("#mobileBlueStats");
   if (mobileBlueStatsEl) {
-    mobileBlueStatsEl.textContent = `B: ${aliveSummaryCompact("blue")}`;
+    mobileBlueStatsEl.textContent = `Blue: ${aliveSummaryCompact("blue")}`;
   }
 
   if (state.explosions.length || (state.lasers && state.lasers.length)) {
@@ -1495,7 +1495,7 @@ function aliveSummary(team) {
 function aliveSummaryCompact(team) {
   const planes = state.tokens.filter((token) => token.team === team && token.type === "plane" && token.alive).length;
   const turrets = state.tokens.filter((token) => token.team === team && token.type === "turret" && token.alive).length;
-  return `${planes}P, ${turrets}T`;
+  return `${planes}✈️ ${turrets}🗼`;
 }
 
 function scheduleComputerMove() {
@@ -1978,6 +1978,14 @@ if (settingsBackdrop) {
 // Mobile Touch Swipe Handling
 const swipeTarget = document.getElementById("boardContainer") || canvas;
 
+let swipeOverlay = document.getElementById("swipeOverlay");
+if (!swipeOverlay) {
+  swipeOverlay = document.createElement("div");
+  swipeOverlay.id = "swipeOverlay";
+  swipeOverlay.className = "swipe-overlay";
+  document.body.appendChild(swipeOverlay);
+}
+
 swipeTarget.addEventListener("touchstart", (event) => {
   if (!state || state.replaying || state.aiThinking) return;
 
@@ -2000,7 +2008,24 @@ swipeTarget.addEventListener("touchmove", (event) => {
     event.preventDefault();
   }
 
-  if (state.gameOver) return;
+  const touch = event.touches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (state.gameOver) {
+    if (dist >= 10) {
+      if (Math.abs(dy) > Math.abs(dx)) {
+        swipeOverlay.classList.add("visible");
+        if (dy > 0) {
+          swipeOverlay.textContent = "⬇️ Swipe for New Game";
+        } else {
+          swipeOverlay.textContent = "⬆️ Swipe for Replay";
+        }
+      }
+    }
+    return;
+  }
 
   const token = activeToken();
   if (!token) return;
@@ -2058,6 +2083,10 @@ swipeTarget.addEventListener("touchmove", (event) => {
 swipeTarget.addEventListener("touchend", (event) => {
   if (!isSwiping) return;
   isSwiping = false;
+
+  if (swipeOverlay) {
+    swipeOverlay.classList.remove("visible");
+  }
 
   const touch = event.changedTouches[0];
   const dx = touch.clientX - touchStartX;
