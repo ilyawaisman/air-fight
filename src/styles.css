@@ -160,6 +160,30 @@ select {
   background: #e2e8f0 !important;
 }
 
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-top: 10px;
+  margin-bottom: 2px;
+  font-weight: 700;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px !important;
+  min-height: 16px !important;
+  height: 16px !important;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: #223a5f;
+}
+
 .buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;

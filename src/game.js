@@ -10,6 +10,7 @@ const controls = {
   metric: document.querySelector("#metric"),
   blueControl: document.querySelector("#blueControl"),
   replaySpeed: document.querySelector("#replaySpeed"),
+  keepMap: document.querySelector("#keepMap"),
   newGame: document.querySelector("#newGame"),
   replay: document.querySelector("#replay"),
 };
@@ -67,6 +68,10 @@ let replayAnimationFrame = null;
 let aiTimer = 0;
 let endGameUITimer = 0;
 let savedReplayState = null;
+
+function hasKeyboard() {
+  return !window.matchMedia("(pointer: coarse)").matches;
+}
 
 function newState() {
   const width = clamp(Number(controls.width.value) || 24, 12, 80);
@@ -138,11 +143,15 @@ function newState() {
     return isSafeCell(cx, cy);
   };
 
-  const obstacles = new Set();
+  let obstacles = new Set();
   const obstacleType = controls.obstacles.value;
   const config = OBSTACLE_CONFIGS[obstacleType] || OBSTACLE_CONFIGS.none;
+  let mapKept = false;
 
-  if (config.density > 0) {
+  if (state && controls.keepMap && controls.keepMap.checked && state.width === width && state.height === height && state.obstacleType === obstacleType) {
+    obstacles = new Set(state.obstacles);
+    mapKept = true;
+  } else if (config.density > 0) {
     const totalCells = width * height;
     const expectedBlobs = (config.density * totalCells) / 1000;
     const numBlobs = Math.max(1, Math.round(expectedBlobs + (Math.random() - 0.5) * (expectedBlobs * 0.4)));
@@ -186,7 +195,7 @@ function newState() {
       }
     }
 
-    if (obstacles.size > 0) {
+    if (!mapKept && obstacles.size > 0) {
       const cells = [];
       let sumX = 0;
       let sumY = 0;
@@ -1147,7 +1156,7 @@ function drawHighlights(geo) {
       }
     }
 
-    if (keyLetter && token.team !== state.aiTeam) {
+    if (keyLetter && token.team !== state.aiTeam && hasKeyboard()) {
       ctx.fillStyle = TEAM[token.team].color;
       ctx.fillText(keyLetter, p.x, p.y);
     }
@@ -1183,8 +1192,8 @@ function drawActiveHighlight(p, token, geo) {
     ? Math.max(10 * geo.dpr, geo.cell * 0.52)
     : Math.max(9 * geo.dpr, geo.cell * 0.45);
 
-  const r = size * 1.5;
-  const len = size * 0.45;
+  const r = size * 1.1;
+  const len = size * 0.35;
 
   ctx.save();
   ctx.strokeStyle = TEAM[token.team].color;
@@ -1414,11 +1423,12 @@ function updateStatus() {
 }
 
 function updateReplayButton() {
+  const suffix = hasKeyboard() ? " (R)" : "";
   if (state.replaying) {
-    controls.replay.textContent = "Stop replay";
+    controls.replay.textContent = "Stop replay" + suffix;
     controls.replay.disabled = false;
   } else {
-    controls.replay.textContent = "Replay fight";
+    controls.replay.textContent = "Replay fight" + suffix;
     controls.replay.disabled = state.moves.length === 0;
   }
 }
@@ -1754,7 +1764,11 @@ function resetGame() {
   hideEndGameUI();
   resolveForcedCrashes();
   updateReplayButton();
+
+  const suffix = hasKeyboard() ? " (N)" : "";
+  controls.newGame.textContent = "New fight" + suffix;
   controls.newGame.disabled = false;
+
   updateStatus();
   draw();
   scheduleComputerMove();
