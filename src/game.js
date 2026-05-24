@@ -45,6 +45,7 @@ const OBSTACLE_CONFIGS = {
   small: { density: 7.5, minSize: 3, maxSize: 10 },
   any: { density: 6, minSize: 3, maxSize: 40 }
 };
+const VERSION = "1.3.11";
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
 const REPLAY_ANIMATION_MS = 220;
@@ -151,6 +152,9 @@ function newState() {
   const config = OBSTACLE_CONFIGS[obstacleType] || OBSTACLE_CONFIGS.none;
   let mapKept = false;
 
+  // Sync mobile map-option radio to desktop before reading,
+  // so the correct value is used regardless of which UI was touched.
+  syncMapOptions("mapOptionMobile", "mapOption");
   const mapOpt = Array.from(controls.mapOption).find((r) => r.checked)?.value || "new";
 
   if (state && state.width === width && state.height === height && state.obstacleType === obstacleType) {
@@ -775,6 +779,10 @@ function pathIntersectsObstaclesOpen(start, end) {
 }
 
 function pointOnSegment(p, start, end) {
+  // Exclude the segment start point to avoid false collisions
+  // when a token begins its move at the same position as another token.
+  if (p.x === start.x && p.y === start.y) return false;
+
   const crossProduct = (p.x - start.x) * (end.y - start.y) - (p.y - start.y) * (end.x - start.x);
   if (Math.abs(crossProduct) > 0.000001) return false;
 
@@ -1031,6 +1039,7 @@ function eventToGrid(event) {
 }
 
 function draw() {
+  cancelAnimationFrame(replayFrame);
   if (!state) return;
   const geo = boardGeometry();
   ctx.clearRect(0, 0, geo.width, geo.height);
@@ -1842,7 +1851,7 @@ canvas.addEventListener("click", (event) => {
   if (!state || state.replaying) return;
   const token = activeToken();
   if (token && token.team === state.aiTeam) {
-    labels.message.textContent = "Computer is moving Blue.";
+    labels.message.textContent = `Computer is moving ${TEAM[state.aiTeam].name}.`;
     return;
   }
   moveToken(eventToGrid(event));
@@ -1931,7 +1940,7 @@ document.querySelectorAll(".preset-btn").forEach((btn) => {
 window.addEventListener("resize", draw);
 
 // Map Options Synchronizer
-const syncMapOptions = (sourceName, targetName) => {
+function syncMapOptions(sourceName, targetName) {
   const source = document.getElementsByName(sourceName);
   const target = document.getElementsByName(targetName);
   const val = Array.from(source).find((r) => r.checked)?.value;
@@ -2106,7 +2115,6 @@ swipeTarget.addEventListener("touchend", (event) => {
 
   if (dist < 15) {
     // Treat as direct tap
-    const rect = canvas.getBoundingClientRect();
     const tapEvent = {
       clientX: touch.clientX,
       clientY: touch.clientY,
@@ -2131,8 +2139,11 @@ swipeTarget.addEventListener("touchend", (event) => {
 
 canvas.addEventListener("touchcancel", () => {
   isSwiping = false;
-  state.draggedMove = null;
+  if (state) state.draggedMove = null;
   draw();
 });
+
+// Apply version string from single source of truth
+document.querySelectorAll(".version").forEach((el) => el.textContent = `v${VERSION}`);
 
 resetGame();
