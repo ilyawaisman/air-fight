@@ -47,7 +47,7 @@ const OBSTACLE_CONFIGS = {
   small: { density: 7.5, minSize: 3, maxSize: 10 },
   any: { density: 6, minSize: 3, maxSize: 40 }
 };
-const VERSION = "1.3.12";
+const VERSION = "1.3.13";
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
 const REPLAY_ANIMATION_MS = 220;
@@ -1981,7 +1981,6 @@ if (settingsBackdrop) {
 
 // Mobile Touch Swipe Handling
 const swipeTarget = document.getElementById("boardContainer") || canvas;
-
 let swipeOverlay = document.getElementById("swipeOverlay");
 if (!swipeOverlay) {
   swipeOverlay = document.createElement("div");
@@ -1989,6 +1988,10 @@ if (!swipeOverlay) {
   swipeOverlay.className = "swipe-overlay";
   document.body.appendChild(swipeOverlay);
 }
+
+let longTouchTimeout = null;
+let longTouchActive = false;
+const LONG_TOUCH_MS = 600;
 
 swipeTarget.addEventListener("touchstart", (event) => {
   if (!state || state.replaying || state.aiThinking) return;
@@ -2003,6 +2006,34 @@ swipeTarget.addEventListener("touchstart", (event) => {
   touchStartY = touch.clientY;
   isSwiping = true;
   state.draggedMove = null;
+
+  if (longTouchTimeout) {
+    clearTimeout(longTouchTimeout);
+  }
+  longTouchActive = false;
+
+  if (!state.gameOver) {
+    longTouchTimeout = setTimeout(() => {
+      if (!isSwiping) return;
+      const token = activeToken();
+      if (!token) return;
+
+      const moves = legalMoves(token);
+      const anchor = token.type === "plane"
+        ? { x: token.x + token.vx, y: token.y + token.vy }
+        : { x: token.x, y: token.y };
+
+      const keepSpeedMove = moves.find((m) => m.x === anchor.x && m.y === anchor.y);
+      if (keepSpeedMove) {
+        longTouchActive = true;
+        if (navigator.vibrate) {
+          navigator.vibrate(40);
+        }
+        moveToken(keepSpeedMove);
+        isSwiping = false;
+      }
+    }, LONG_TOUCH_MS);
+  }
 });
 
 swipeTarget.addEventListener("touchmove", (event) => {
@@ -2016,6 +2047,11 @@ swipeTarget.addEventListener("touchmove", (event) => {
   const dx = touch.clientX - touchStartX;
   const dy = touch.clientY - touchStartY;
   const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > 10 && longTouchTimeout) {
+    clearTimeout(longTouchTimeout);
+    longTouchTimeout = null;
+  }
 
   if (state.gameOver) {
     if (dist >= 10) {
@@ -2080,6 +2116,16 @@ swipeTarget.addEventListener("touchmove", (event) => {
 });
 
 swipeTarget.addEventListener("touchend", (event) => {
+  if (longTouchTimeout) {
+    clearTimeout(longTouchTimeout);
+    longTouchTimeout = null;
+  }
+
+  if (longTouchActive) {
+    longTouchActive = false;
+    return;
+  }
+
   if (!isSwiping) return;
   isSwiping = false;
 
@@ -2132,8 +2178,13 @@ swipeTarget.addEventListener("touchend", (event) => {
   draw();
 });
 
-canvas.addEventListener("touchcancel", () => {
+swipeTarget.addEventListener("touchcancel", () => {
   isSwiping = false;
+  if (longTouchTimeout) {
+    clearTimeout(longTouchTimeout);
+    longTouchTimeout = null;
+  }
+  longTouchActive = false;
   if (state) state.draggedMove = null;
   draw();
 });
