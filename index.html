@@ -11,7 +11,7 @@
   <body>
     <div id="settingsBackdrop" class="settings-backdrop"></div>
     <div class="mobile-top-bar">
-      <div class="mobile-brand">Air Fight <span class="version">v1.3.15</span></div>
+      <div class="mobile-brand">Air Fight <span class="version">v1.3.16</span></div>
       <div class="mobile-status" id="mobileStatus">
         <span style="color: var(--red); font-weight: 800;" id="mobileRedStats"></span>
         <span style="color: var(--border); margin: 0 4px;">|</span>
@@ -22,7 +22,7 @@
       <section class="control-panel" aria-label="Game controls">
         <button id="closeSettings" class="close-btn" type="button" aria-label="Close settings">&times;</button>
         <div class="brand">
-          <h1>Air Fight <span class="version">v1.3.15</span></h1>
+          <h1>Air Fight <span class="version">v1.3.16</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -89,16 +89,6 @@
             </select>
           </label>
 
-          <label>
-            Replay speed
-            <select id="replaySpeed">
-              <option value="1" selected>1x</option>
-              <option value="2">2x</option>
-              <option value="4">4x</option>
-              <option value="8">8x</option>
-            </select>
-          </label>
-
           <div class="map-option-group" role="radiogroup" aria-label="Map preservation on restart">
             <span class="group-title">Restart map</span>
             <div class="radio-segmented">
@@ -119,7 +109,10 @@
 
           <div class="buttons">
             <button id="newGame" class="new-game-btn" type="button">New</button>
-            <button id="replay" class="replay-btn" type="button">Replay</button>
+            <div class="replay-group">
+              <button id="replay" class="replay-btn" type="button">Replay</button>
+              <button class="speed-btn" type="button" aria-label="Replay speed">1x</button>
+            </div>
           </div>
         </div>
       </section>
@@ -184,11 +177,14 @@
               <span>Swap Map</span>
             </label>
           </div>
-          <button class="replay-btn" type="button">Replay</button>
+          <div class="replay-group">
+            <button class="replay-btn" type="button">Replay</button>
+            <button class="speed-btn" type="button" aria-label="Replay speed">1x</button>
+          </div>
         </div>
       </section>
     </main>
 
-    <script src="./src/game.js?v=1.3.15"></script>
+    <script src="./src/game.js?v=1.3.16"></script>
   </body>
 </html>

@@ -9,7 +9,6 @@ const controls = {
   obstacles: document.querySelector("#obstacles"),
   metric: document.querySelector("#metric"),
   blueControl: document.querySelector("#blueControl"),
-  replaySpeed: document.querySelector("#replaySpeed"),
   mapOption: document.getElementsByName("mapOption"),
   newGame: document.querySelectorAll(".new-game-btn"),
   replay: document.querySelectorAll(".replay-btn"),
@@ -1725,7 +1724,7 @@ function startReplay() {
         return;
       }
 
-      const speed = parseFloat(controls.replaySpeed.value) || 1.0;
+      const speed = currentReplaySpeed;
       replayTimer = setTimeout(showNextMove, Math.max(0, (REPLAY_STEP_MS - REPLAY_ANIMATION_MS) / speed));
     });
   };
@@ -1761,7 +1760,7 @@ function animateReplayMove(move, done) {
   const started = performance.now();
   const before = move.before;
   const after = move.after;
-  const speed = parseFloat(controls.replaySpeed.value) || 1.0;
+  const speed = currentReplaySpeed;
   const animMs = REPLAY_ANIMATION_MS / speed;
 
   const tick = (now) => {
@@ -1920,6 +1919,27 @@ window.addEventListener("keydown", (event) => {
 
 controls.newGame.forEach((b) => b.addEventListener("click", resetGame));
 controls.replay.forEach((b) => b.addEventListener("click", startReplay));
+
+let currentReplaySpeed = 1;
+
+function cycleReplaySpeed() {
+  if (currentReplaySpeed === 1) {
+    currentReplaySpeed = 2;
+  } else if (currentReplaySpeed === 2) {
+    currentReplaySpeed = 4;
+  } else if (currentReplaySpeed === 4) {
+    currentReplaySpeed = 8;
+  } else {
+    currentReplaySpeed = 1;
+  }
+
+  // Synchronize speed button text content across all instances (desktop & mobile)
+  document.querySelectorAll(".speed-btn").forEach((btn) => {
+    btn.textContent = currentReplaySpeed + "x";
+  });
+}
+
+document.querySelectorAll(".speed-btn").forEach((b) => b.addEventListener("click", cycleReplaySpeed));
 controls.blueControl.addEventListener("change", () => {
   if (state) {
     state.aiTeam = controls.blueControl.value === "computer" ? "blue" : null;

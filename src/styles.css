@@ -245,6 +245,52 @@ button {
   border-color: #223a5f;
 }
 
+.replay-group {
+  display: flex !important;
+  min-height: 43px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #bac7d8;
+  background: #f6f9fc;
+}
+
+.replay-group .replay-btn {
+  flex: 1 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  margin: 0 !important;
+  min-height: unset !important;
+  height: 100% !important;
+  background: transparent !important;
+  color: #102033 !important;
+}
+
+.replay-group .speed-btn {
+  flex: 0 0 42px !important;
+  width: 42px !important;
+  min-height: unset !important;
+  height: 100% !important;
+  background: #edf2f7 !important;
+  color: #102033 !important;
+  border: none !important;
+  border-left: 1px solid #bac7d8 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  font-weight: 800 !important;
+}
+
+.replay-group .speed-btn:hover {
+  background: #e2e8f0 !important;
+}
+
+.replay-group .speed-btn:active {
+  background: #cbd5e0 !important;
+}
+
 button:disabled {
   opacity: 0.55;
   cursor: default;
@@ -652,6 +698,45 @@ button:disabled {
   .mobile-action-bar .radio-segmented.compact label span {
     padding: 7px 0 !important;
     font-size: 10px !important;
+  }
+
+  .mobile-action-bar .replay-group {
+    flex: 1.25 !important;
+    display: flex !important;
+    height: 40px !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+    border: 1px solid #bac7d8 !important;
+  }
+
+  .mobile-action-bar .replay-group button.replay-btn {
+    flex: 1 !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+    background: #f6f9fc !important;
+    color: #102033 !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+  }
+
+  .mobile-action-bar .replay-group button.speed-btn {
+    flex: 0 0 34px !important;
+    width: 34px !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    background: #edf2f7 !important;
+    color: #102033 !important;
+    border: none !important;
+    border-left: 1px solid #bac7d8 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
   }
 }
 
