@@ -465,30 +465,13 @@ button:disabled {
     text-overflow: ellipsis;
   }
 
-  .settings-toggle-btn {
-    background: none !important;
-    border: none !important;
-    color: var(--muted) !important;
-    cursor: pointer;
-    padding: 6px !important;
-    display: flex !important;
-    align-items: center;
-    border-radius: 50% !important;
-    transition: background 0.2s, color 0.2s;
-    min-height: unset !important;
-    width: auto !important;
-    flex-shrink: 0 !important;
-  }
-
-  .settings-toggle-btn:hover {
-    background: rgba(0, 0, 0, 0.05) !important;
-    color: var(--ink) !important;
-  }
-
   /* Hide redundant actions from the side panel on mobile */
-  .control-panel .map-option-group,
-  .control-panel .buttons {
+  .control-panel .map-option-group {
     display: none !important;
+  }
+
+  .control-panel .buttons {
+    margin-top: 18px !important;
   }
 
   /* Control Panel as a sliding drawer */
@@ -614,6 +597,49 @@ button:disabled {
     height: 40px !important;
     font-size: 13px !important;
     font-weight: 800 !important;
+  }
+
+  .new-game-group {
+    flex: 1.25 !important;
+    display: flex !important;
+    height: 40px !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+    border: 1px solid #223a5f !important;
+  }
+
+  .mobile-action-bar .new-game-group button.new-game-btn {
+    flex: 1 !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+    background: #223a5f !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+  }
+
+  .mobile-action-bar .new-game-group button.settings-toggle-btn-mobile {
+    flex: 0 0 34px !important;
+    width: 34px !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    background: #1c3254 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+  }
+
+  .mobile-action-bar .new-game-group button.settings-toggle-btn-mobile:active {
+    background: #0f1a2a !important;
   }
 
   .mobile-action-bar .radio-segmented.compact {
