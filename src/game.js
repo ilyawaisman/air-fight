@@ -47,7 +47,7 @@ const OBSTACLE_CONFIGS = {
   small: { density: 7.5, minSize: 3, maxSize: 10 },
   any: { density: 6, minSize: 3, maxSize: 40 }
 };
-const VERSION = "1.3.14";
+const VERSION = "1.3.15";
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
 const REPLAY_ANIMATION_MS = 220;
@@ -1962,13 +1962,38 @@ function hideMobileSettings() {
   if (controlPanel && settingsBackdrop) {
     controlPanel.classList.remove("open");
     settingsBackdrop.classList.remove("active");
+    
+    // Reset chevron icon in bottom action bar to point up
+    const toggleBtn = document.querySelector("#toggleSettings.settings-toggle-btn-mobile");
+    if (toggleBtn) {
+      toggleBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+      `;
+    }
   }
 }
 
 if (toggleSettingsBtn && controlPanel && settingsBackdrop) {
   toggleSettingsBtn.addEventListener("click", () => {
-    controlPanel.classList.add("open");
-    settingsBackdrop.classList.add("active");
+    const isOpen = controlPanel.classList.contains("open");
+    if (isOpen) {
+      hideMobileSettings();
+    } else {
+      controlPanel.classList.add("open");
+      settingsBackdrop.classList.add("active");
+      
+      // Update chevron icon in bottom action bar to point down
+      const toggleBtn = document.querySelector("#toggleSettings.settings-toggle-btn-mobile");
+      if (toggleBtn) {
+        toggleBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        `;
+      }
+    }
   });
 }
 
