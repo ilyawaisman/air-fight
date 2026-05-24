@@ -2030,11 +2030,6 @@ swipeTarget.addEventListener("touchmove", (event) => {
   const token = activeToken();
   if (!token) return;
 
-  const touch = event.touches[0];
-  const dx = touch.clientX - touchStartX;
-  const dy = touch.clientY - touchStartY;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-
   const moves = legalMoves(token);
   const anchor = token.type === "plane"
     ? { x: token.x + token.vx, y: token.y + token.vy }
