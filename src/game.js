@@ -1495,7 +1495,7 @@ function aliveSummary(team) {
 function aliveSummaryCompact(team) {
   const planes = state.tokens.filter((token) => token.team === team && token.type === "plane" && token.alive).length;
   const turrets = state.tokens.filter((token) => token.team === team && token.type === "turret" && token.alive).length;
-  return `${planes}✈️ ${turrets}🗼`;
+  return `${planes}✈️ ${turrets}📡`;
 }
 
 function scheduleComputerMove() {
