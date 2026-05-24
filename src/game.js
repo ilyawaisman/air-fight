@@ -22,6 +22,8 @@ const labels = {
   redAlive: document.querySelector("#redAlive"),
   blueAlive: document.querySelector("#blueAlive"),
   message: document.querySelector("#message"),
+  mobileRedStats: document.querySelector("#mobileRedStats"),
+  mobileBlueStats: document.querySelector("#mobileBlueStats"),
 };
 
 const endGame = {
@@ -312,9 +314,9 @@ function evenPoint(index, count, width) {
 }
 
 function turretPoint(index, count, width) {
-  const center = width / 2;
-  if (count === 1) return Math.round(center);
-  return clamp(Math.round(center + (index === 0 ? -2 : 2)), 0, width);
+  if (count === 1) return Math.round(width / 2);
+  // Space turrets evenly across the center portion of the field
+  return clamp(Math.round(((index + 1) * width) / (count + 1)), 0, width);
 }
 
 function clamp(value, min, max) {
@@ -545,8 +547,8 @@ function resolveForcedCrashes() {
 
     const boundaryImpact = boundaryImpactPoint(start, intended);
     const obstacleImpact = obstacleImpactPoint(start, intended);
-    const dB = distancePoints(start, boundaryImpact);
-    const dO = distancePoints(start, obstacleImpact);
+    const dB = distance(start, boundaryImpact);
+    const dO = distance(start, obstacleImpact);
 
     let hitObstacle = false;
     if (pathIntersectsObstacles(start, intended) && dO < dB) {
@@ -1051,13 +1053,11 @@ function draw() {
   drawTokens(geo);
   drawExplosions(geo);
 
-  const mobileRedStatsEl = document.querySelector("#mobileRedStats");
-  if (mobileRedStatsEl) {
-    mobileRedStatsEl.textContent = `Red: ${aliveSummaryCompact("red")}`;
+  if (labels.mobileRedStats) {
+    labels.mobileRedStats.textContent = `Red: ${aliveSummaryCompact("red")}`;
   }
-  const mobileBlueStatsEl = document.querySelector("#mobileBlueStats");
-  if (mobileBlueStatsEl) {
-    mobileBlueStatsEl.textContent = `Blue: ${aliveSummaryCompact("blue")}`;
+  if (labels.mobileBlueStats) {
+    labels.mobileBlueStats.textContent = `Blue: ${aliveSummaryCompact("blue")}`;
   }
 
   if (state.explosions.length || (state.lasers && state.lasers.length)) {
@@ -1619,13 +1619,13 @@ function scoreComputerPlaneMove(token, move, parsedObstacles) {
   let score = 0;
 
   for (const target of enemies) {
-    const d = distancePoints(move, target);
+    const d = distance(move, target);
     if (d <= HIT_RADIUS) score += target.type === "turret" ? 12000 : 8000;
     score += 80 / (d + 1);
   }
 
   for (const turret of enemyTurrets) {
-    if (distancePoints(move, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(move, turret)) score -= 6500;
+    if (distance(move, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(move, turret)) score -= 6500;
   }
 
   const nextVx = token.vx + move.ax;
@@ -1656,15 +1656,10 @@ function scoreComputerTurretMove(token, move, parsedObstacles) {
   const enemyPlanes = state.tokens.filter((target) => target.alive && target.team !== token.team && target.type === "plane");
   if (!enemyPlanes.length) return 0;
 
-  const nearest = Math.min(...enemyPlanes.map((plane) => distancePoints(move, plane)));
+  const nearest = Math.min(...enemyPlanes.map((plane) => distance(move, plane)));
   return -nearest;
 }
 
-function distancePoints(a, b) {
-  const dx = Math.abs(a.x - b.x);
-  const dy = Math.abs(a.y - b.y);
-  return state.metric === "taxicab" ? dx + dy : Math.max(dx, dy);
-}
 
 function startReplay() {
   if (!state.moves.length) return;
@@ -1821,7 +1816,7 @@ function interpolateSnapshots(before, after, progress) {
 }
 
 function resetGame() {
-  if (typeof hideMobileSettings === "function") hideMobileSettings();
+  hideMobileSettings();
   clearTimeout(replayTimer);
   clearTimeout(aiTimer);
   clearTimeout(endGameUITimer);

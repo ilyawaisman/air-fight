@@ -820,3 +820,31 @@ button:disabled {
   border-color: rgba(245, 158, 11, 0.8);
   box-shadow: 0 0 30px rgba(245, 158, 11, 0.35), var(--shadow);
 }
+
+/* Swipe Overlay (mobile gesture feedback) */
+.swipe-overlay {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(24, 33, 47, 0.85);
+  backdrop-filter: blur(10px);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 14px 28px;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  z-index: 300;
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.swipe-overlay.visible {
+  display: block;
+  opacity: 1;
+}
