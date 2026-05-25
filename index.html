@@ -4,13 +4,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Air Fight</title>
-    <link rel="stylesheet" href="./styles.css">
+    <meta name="description" content="Air Fight - A tactical quad-ruled paper dogfight vector game. Master the rules of vector motion, accelerate, avoid enemy turrets, and eliminate the opponent planes.">
+    <link rel="stylesheet" href="./src/styles.css">
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   </head>
   <body>
+    <div id="settingsBackdrop" class="settings-backdrop"></div>
+    <div class="mobile-top-bar">
+      <div class="mobile-brand">Air Fight <span class="version">v1.3.16</span></div>
+      <div class="mobile-status" id="mobileStatus">
+        <span style="color: var(--red); font-weight: 800;" id="mobileRedStats"></span>
+        <span style="color: var(--border); margin: 0 4px;">|</span>
+        <span style="color: var(--blue); font-weight: 800;" id="mobileBlueStats"></span>
+      </div>
+    </div>
     <main class="app">
       <section class="control-panel" aria-label="Game controls">
+        <button id="closeSettings" class="close-btn" type="button" aria-label="Close settings">&times;</button>
         <div class="brand">
-          <h1>Air Fight</h1>
+          <h1>Air Fight <span class="version">v1.3.16</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -21,6 +33,12 @@
               <input id="fieldWidth" type="number" min="12" max="80" value="24" aria-label="Field width">
               <span>x</span>
               <input id="fieldHeight" type="number" min="16" max="96" value="48" aria-label="Field height">
+            </span>
+            <span class="field-presets">
+              <button type="button" class="preset-btn" data-w="12" data-h="16">12x16</button>
+              <button type="button" class="preset-btn" data-w="24" data-h="24">24x24</button>
+              <button type="button" class="preset-btn" data-w="24" data-h="48">24x48</button>
+              <button type="button" class="preset-btn" data-w="80" data-h="96">80x96</button>
             </span>
           </label>
 
@@ -46,6 +64,16 @@
           </label>
 
           <label>
+            Obstacles
+            <select id="obstacles">
+              <option value="none" selected>None</option>
+              <option value="big">Big</option>
+              <option value="small">Small</option>
+              <option value="any">Any</option>
+            </select>
+          </label>
+
+          <label>
             Distance
             <select id="metric">
               <option value="linf" selected>L infinity</option>
@@ -61,15 +89,47 @@
             </select>
           </label>
 
+          <div class="map-option-group" role="radiogroup" aria-label="Map preservation on restart">
+            <span class="group-title">Restart map</span>
+            <div class="radio-segmented">
+              <label>
+                <input type="radio" name="mapOption" value="new" checked>
+                <span>New</span>
+              </label>
+              <label>
+                <input type="radio" name="mapOption" value="keep">
+                <span>Keep</span>
+              </label>
+              <label>
+                <input type="radio" name="mapOption" value="swap">
+                <span>Swap</span>
+              </label>
+            </div>
+          </div>
+
           <div class="buttons">
-            <button id="newGame" type="button">New fight</button>
-            <button id="replay" type="button">Replay fight</button>
+            <button id="newGame" class="new-game-btn" type="button">New</button>
+            <div class="replay-group">
+              <button id="replay" class="replay-btn" type="button">Replay</button>
+              <button class="speed-btn" type="button" aria-label="Replay speed">1x</button>
+            </div>
           </div>
         </div>
       </section>
 
       <section class="board-wrap" aria-label="Air Fight board">
-        <canvas id="board" width="1000" height="1600"></canvas>
+        <div class="board-container" id="boardContainer">
+          <canvas id="board" width="1000" height="1600" tabindex="0"></canvas>
+          <div id="endGameOverlay" class="end-game-overlay">
+            <div class="overlay-content">
+              <h2 id="overlayTitle"></h2>
+              <p id="overlaySubtitle">Game Over</p>
+            </div>
+          </div>
+          <div id="endGameBanner" class="end-game-banner">
+            <span id="bannerText"></span>
+          </div>
+        </div>
         <aside class="status-panel">
           <div>
             <span class="eyebrow">Turn</span>
@@ -93,9 +153,38 @@
           </div>
           <p id="message" class="message">Choose one highlighted point.</p>
         </aside>
+
+        <div class="mobile-action-bar">
+          <div class="new-game-group">
+            <button class="new-game-btn" type="button">New</button>
+            <button id="toggleSettings" class="settings-toggle-btn-mobile" type="button" aria-label="Configure Settings">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="18 15 12 9 6 15"></polyline>
+              </svg>
+            </button>
+          </div>
+          <div class="radio-segmented compact" role="radiogroup" aria-label="Map preservation on restart mobile">
+            <label>
+              <input type="radio" name="mapOptionMobile" value="new" checked>
+              <span>New Map</span>
+            </label>
+            <label>
+              <input type="radio" name="mapOptionMobile" value="keep">
+              <span>Keep Map</span>
+            </label>
+            <label>
+              <input type="radio" name="mapOptionMobile" value="swap">
+              <span>Swap Map</span>
+            </label>
+          </div>
+          <div class="replay-group">
+            <button class="replay-btn" type="button">Replay</button>
+            <button class="speed-btn" type="button" aria-label="Replay speed">1x</button>
+          </div>
+        </div>
       </section>
     </main>
 
-    <script src="./game.js"></script>
+    <script src="./src/game.js?v=1.3.16"></script>
   </body>
 </html>
