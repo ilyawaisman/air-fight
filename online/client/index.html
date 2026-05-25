@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Fight Online</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <main class="app">
+      <aside class="panel">
+        <div class="brand">
+          <h1>Air Fight Online</h1>
+          <p>Turn-based vector dogfights</p>
+        </div>
+
+        <form id="joinForm" class="join-form">
+          <label>
+            Name
+            <input id="playerName" name="playerName" maxlength="24" value="Pilot" autocomplete="nickname">
+          </label>
+
+          <fieldset>
+            <legend>Preset</legend>
+            <label class="preset">
+              <input type="radio" name="presetId" value="duel" checked>
+              <span><strong>Duel</strong> 24x24, 1 plane, any obstacles</span>
+            </label>
+            <label class="preset">
+              <input type="radio" name="presetId" value="classic">
+              <span><strong>Classic</strong> 24x48, 3 planes, 1 turret, any obstacles</span>
+            </label>
+            <label class="preset">
+              <input type="radio" name="presetId" value="tactical">
+              <span><strong>Tactical</strong> 28x56, 7 planes, 1 turret, any obstacles</span>
+            </label>
+          </fieldset>
+
+          <div class="actions">
+            <button id="playButton" type="submit">Play online</button>
+            <button id="leaveButton" type="button" disabled>Leave queue</button>
+          </div>
+        </form>
+
+        <section class="status">
+          <div>
+            <span>Connection</span>
+            <strong id="connectionLabel">Connecting</strong>
+          </div>
+          <div>
+            <span>Match</span>
+            <strong id="matchLabel">Not queued</strong>
+          </div>
+          <div>
+            <span>You</span>
+            <strong id="teamLabel">-</strong>
+          </div>
+          <p id="messageLabel">Enter a name, choose a preset, then play.</p>
+        </section>
+      </aside>
+
+      <section class="board-shell">
+        <canvas id="board" width="1000" height="1000"></canvas>
+      </section>
+    </main>
+  </body>
+</html>
