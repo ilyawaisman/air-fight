@@ -2,6 +2,7 @@ export type Team = "red" | "blue";
 export type TokenType = "plane" | "turret";
 export type Metric = "linf" | "taxicab";
 export type PresetId = "duel" | "classic" | "tactical";
+export type ObstacleType = "none" | "big" | "small" | "any";
 
 export interface Point {
   x: number;
@@ -31,7 +32,7 @@ export interface GamePreset {
   height: number;
   planes: number;
   turrets: number;
-  obstacles: "any";
+  obstacles: ObstacleType;
   metric: Metric;
 }
 

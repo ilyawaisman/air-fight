@@ -1,18 +1,27 @@
 import { GAME_PRESETS } from "./presets.js";
 import { createRng } from "./random.js";
-import type { GamePreset, GameState, Move, MoveResult, Point, PresetId, Team, Token } from "./types.js";
+import type { GamePreset, GameState, Move, MoveResult, ObstacleType, Point, PresetId, Team, Token } from "./types.js";
 
 const HIT_RADIUS = 1;
 const TURRET_RADIUS = 5;
-const ANY_OBSTACLE_CONFIG = { density: 6, minSize: 3, maxSize: 40 };
+const OBSTACLE_CONFIGS: Record<ObstacleType, { density: number; minSize: number; maxSize: number }> = {
+  none: { density: 0, minSize: 0, maxSize: 0 },
+  big: { density: 3, minSize: 20, maxSize: 40 },
+  small: { density: 7.5, minSize: 3, maxSize: 10 },
+  any: { density: 6, minSize: 3, maxSize: 40 },
+};
 
 export function createGame(id: string, presetId: PresetId, seed: number): GameState {
   const preset = GAME_PRESETS[presetId];
+  return createGameFromPreset(id, preset, seed);
+}
+
+export function createGameFromPreset(id: string, preset: GamePreset, seed: number): GameState {
   const tokens = createTokens(preset);
   const obstacles = createObstacles(preset, seed);
   const state: GameState = {
     id,
-    presetId,
+    presetId: preset.id,
     seed,
     width: preset.width,
     height: preset.height,
@@ -132,6 +141,9 @@ function createTokens(preset: GamePreset): Token[] {
 }
 
 function createObstacles(preset: GamePreset, seed: number): string[] {
+  const config = OBSTACLE_CONFIGS[preset.obstacles];
+  if (config.density <= 0) return [];
+
   const rng = createRng(seed);
   const obstacles = new Set<string>();
   const startingPoints = startingTokenPoints(preset);
@@ -139,7 +151,7 @@ function createObstacles(preset: GamePreset, seed: number): string[] {
   const isValidObstacleCell = (cx: number, cy: number) => cx >= 3 && cx < preset.width - 3 && cy >= 3 && cy < preset.height - 3 && isSafeCell(cx, cy);
 
   const totalCells = preset.width * preset.height;
-  const expectedBlobs = (ANY_OBSTACLE_CONFIG.density * totalCells) / 1000;
+  const expectedBlobs = (config.density * totalCells) / 1000;
   const numBlobs = Math.max(1, Math.round(expectedBlobs + (rng() - 0.5) * (expectedBlobs * 0.4)));
 
   for (let b = 0; b < numBlobs; b += 1) {
@@ -156,7 +168,7 @@ function createObstacles(preset: GamePreset, seed: number): string[] {
 
     const blob = new Set<string>([`${seedCell.x},${seedCell.y}`]);
     obstacles.add(`${seedCell.x},${seedCell.y}`);
-    const targetSize = Math.floor(rng() * (ANY_OBSTACLE_CONFIG.maxSize - ANY_OBSTACLE_CONFIG.minSize + 1)) + ANY_OBSTACLE_CONFIG.minSize;
+    const targetSize = Math.floor(rng() * (config.maxSize - config.minSize + 1)) + config.minSize;
     while (blob.size < targetSize) {
       const neighbors: string[] = [];
       for (const key of blob) {
