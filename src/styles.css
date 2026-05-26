@@ -112,7 +112,7 @@ label {
   font-weight: 700;
 }
 
-input,
+input:not([type="checkbox"]),
 select {
   width: 100%;
   min-height: 42px;
@@ -121,6 +121,28 @@ select {
   color: var(--ink);
   background: #fff;
   padding: 0 11px;
+}
+
+.checkbox-label {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: unset !important;
+  margin: 0 !important;
+  cursor: pointer;
+  accent-color: var(--blue);
 }
 
 .field-pair {

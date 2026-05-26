@@ -7,7 +7,7 @@ const controls = {
   planes: document.querySelector("#planeCount"),
   turrets: document.querySelector("#turretCount"),
   obstacles: document.querySelector("#obstacles"),
-  metric: document.querySelector("#metric"),
+  showTurretZones: document.querySelector("#showTurretZones"),
   blueControl: document.querySelector("#blueControl"),
   mapOption: document.getElementsByName("mapOption"),
   newGame: document.querySelectorAll(".new-game-btn"),
@@ -46,7 +46,7 @@ const OBSTACLE_CONFIGS = {
   small: { density: 7.5, minSize: 3, maxSize: 10 },
   any: { density: 6, minSize: 3, maxSize: 40 }
 };
-const VERSION = "1.3.15";
+const VERSION = "1.4.0";
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
 const REPLAY_ANIMATION_MS = 220;
@@ -292,7 +292,6 @@ function newState() {
   return {
     width,
     height,
-    metric: controls.metric.value,
     tokens,
     obstacles,
     obstacleType,
@@ -473,7 +472,7 @@ function resolveCombat(mover, start) {
   if (mover.alive && mover.type === "plane") {
     for (const target of state.tokens) {
       if (!target.alive || target.team === mover.team) continue;
-      if (distance(mover, target) <= HIT_RADIUS) {
+      if (distanceLInf(mover, target) <= HIT_RADIUS) {
         eliminate(target, eliminated);
         const shot = { fromX: mover.x, fromY: mover.y, toX: target.x, toY: target.y, color: TEAM[mover.team].color };
         if (!state.pendingShots) state.pendingShots = [];
@@ -487,7 +486,7 @@ function resolveCombat(mover, start) {
     if (!plane.alive || plane.type !== "plane") continue;
     for (const turret of state.tokens) {
       if (!turret.alive || turret.type !== "turret" || turret.team === plane.team) continue;
-      if (distance(plane, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(turret, plane)) {
+      if (distanceManhattan(plane, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(turret, plane)) {
         eliminate(plane, eliminated);
         turret.angle = Math.atan2(-(plane.y - turret.y), plane.x - turret.x);
         const shot = { fromX: turret.x, fromY: turret.y, toX: plane.x, toY: plane.y, color: TEAM[turret.team].color };
@@ -546,8 +545,8 @@ function resolveForcedCrashes() {
 
     const boundaryImpact = boundaryImpactPoint(start, intended);
     const obstacleImpact = obstacleImpactPoint(start, intended);
-    const dB = distance(start, boundaryImpact);
-    const dO = distance(start, obstacleImpact);
+    const dB = distanceLInf(start, boundaryImpact);
+    const dO = distanceLInf(start, obstacleImpact);
 
     let hitObstacle = false;
     if (pathIntersectsObstacles(start, intended) && dO < dB) {
@@ -861,10 +860,16 @@ function smashPlaneAtObstacle(token, start, end) {
   }
 }
 
-function distance(a, b) {
+function distanceManhattan(a, b) {
   const dx = Math.abs(a.x - b.x);
   const dy = Math.abs(a.y - b.y);
-  return state.metric === "taxicab" ? dx + dy : Math.max(dx, dy);
+  return dx + dy;
+}
+
+function distanceLInf(a, b) {
+  const dx = Math.abs(a.x - b.x);
+  const dy = Math.abs(a.y - b.y);
+  return Math.max(dx, dy);
 }
 
 function checkWin() {
@@ -1046,6 +1051,7 @@ function draw() {
   ctx.clearRect(0, 0, geo.width, geo.height);
   drawPaper(geo);
   drawObstacles(geo);
+  drawTurretZones(geo);
   drawTrajectories(geo);
   drawHighlights(geo);
   drawLasers(geo);
@@ -1090,6 +1096,48 @@ function drawPaper(geo) {
   ctx.strokeStyle = "#24364f";
   ctx.lineWidth = 2 * geo.dpr;
   ctx.strokeRect(geo.left, geo.top, state.width * geo.cell, state.height * geo.cell);
+}
+
+function drawTurretZones(geo) {
+  if (!controls.showTurretZones || !controls.showTurretZones.checked) return;
+
+  ctx.save();
+  // Clip to the board boundary
+  ctx.beginPath();
+  ctx.rect(geo.left, geo.top, state.width * geo.cell, state.height * geo.cell);
+  ctx.clip();
+
+  for (const token of state.tokens) {
+    if (!token.alive || token.type !== "turret") continue;
+
+    const r = TURRET_RADIUS; // 5
+    
+    // The corners of the Manhattan diamond
+    const right = gridToPixel({ x: token.x + r, y: token.y }, geo);
+    const top = gridToPixel({ x: token.x, y: token.y + r }, geo);
+    const left = gridToPixel({ x: token.x - r, y: token.y }, geo);
+    const bottom = gridToPixel({ x: token.x, y: token.y - r }, geo);
+
+    // Draw filled diamond
+    ctx.beginPath();
+    ctx.moveTo(right.x, right.y);
+    ctx.lineTo(top.x, top.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.lineTo(bottom.x, bottom.y);
+    ctx.closePath();
+
+    // Use a very light/pale version of the team color with transparency
+    ctx.fillStyle = token.team === "red" ? "rgba(212, 61, 61, 0.05)" : "rgba(37, 99, 199, 0.05)";
+    ctx.fill();
+
+    // Draw the dashed/dotted boundary of the zone
+    ctx.strokeStyle = TEAM[token.team].color;
+    ctx.lineWidth = 1.5 * geo.dpr;
+    ctx.setLineDash([4 * geo.dpr, 4 * geo.dpr]);
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 function drawObstacles(geo) {
@@ -1618,13 +1666,13 @@ function scoreComputerPlaneMove(token, move, parsedObstacles) {
   let score = 0;
 
   for (const target of enemies) {
-    const d = distance(move, target);
+    const d = distanceLInf(move, target);
     if (d <= HIT_RADIUS) score += target.type === "turret" ? 12000 : 8000;
     score += 80 / (d + 1);
   }
 
   for (const turret of enemyTurrets) {
-    if (distance(move, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(move, turret)) score -= 6500;
+    if (distanceManhattan(move, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(move, turret)) score -= 6500;
   }
 
   const nextVx = token.vx + move.ax;
@@ -1655,7 +1703,7 @@ function scoreComputerTurretMove(token, move, parsedObstacles) {
   const enemyPlanes = state.tokens.filter((target) => target.alive && target.team !== token.team && target.type === "plane");
   if (!enemyPlanes.length) return 0;
 
-  const nearest = Math.min(...enemyPlanes.map((plane) => distance(move, plane)));
+  const nearest = Math.min(...enemyPlanes.map((plane) => distanceManhattan(move, plane)));
   return -nearest;
 }
 
@@ -1953,6 +2001,7 @@ document.querySelectorAll(".preset-btn").forEach((btn) => {
   });
 });
 window.addEventListener("resize", draw);
+controls.showTurretZones.addEventListener("change", draw);
 
 // Map Options Synchronizer
 function syncMapOptions(sourceName, targetName) {
