@@ -44,9 +44,9 @@ const OBSTACLE_CONFIGS = {
   none: { density: 0, minSize: 0, maxSize: 0 },
   big: { density: 3, minSize: 20, maxSize: 40 },
   small: { density: 7.5, minSize: 3, maxSize: 10 },
-  any: { density: 6, minSize: 3, maxSize: 40 }
+  mixed: { density: 6, minSize: 3, maxSize: 40 }
 };
-const VERSION = "1.4.0";
+const VERSION = "1.4.1";
 const TRAIL_DECAY = 0.9;
 const REPLAY_STEP_MS = 260;
 const REPLAY_ANIMATION_MS = 220;

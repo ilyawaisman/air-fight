@@ -36,7 +36,7 @@
 - **Squad Customization**: Fight with 1 to 7 planes and up to 2 turrets per team.
 - **Fixed Distance Rules**: Planes always use **L-Infinity** (Chebyshev/eight-way) distance to hit targets, while turrets always use **Taxicab** (Manhattan/four-way) distance to fire.
 - **Turret Attack Zones**: A visual option to toggle visual dashed colored diamonds indicating the exact range and danger zone of each alive turret on the grid.
-- **Random Obstacles**: Choose between `None`, `Big`, `Small`, or `Any` obstacle presets. Generated cells use a sketchy diagonal hand-hatched blueprint style, respect a 3-cell outer border buffer, and maintain a starting zone safety buffer.
+- **Random Obstacles**: Choose between `None`, `Big`, `Small`, or `Mixed` obstacle presets. Generated cells use a sketchy diagonal hand-hatched blueprint style, respect a 3-cell outer border buffer, and maintain a starting zone safety buffer.
 - **Premium Visuals & Laser Effects**: Fully styled with an architectural blueprint grid aesthetic, featuring electricity-flickering laser beams, traveling energy bolts, expanding shockwave rings, active plane guiding lines, and a delayed glassmorphic game-over screen.
 - **Smart Computer AI Opponent**: Play solo against a smart AI that targets enemy planes, avoids turret ranges, avoids obstacle/token collisions using a recursive 3-step lookahead search, and manages speed dynamically.
 - **Replay System**: Review your entire fight with smooth step-by-step sliding animations, dynamic explosion effects, laser firing replays, and active status updates.
