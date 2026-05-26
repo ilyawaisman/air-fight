@@ -13,7 +13,7 @@ This file captures the state needed to continue development on another machine.
 - `shared/`: pure TypeScript game model, presets, deterministic RNG, and engine rules
 - `server/`: Node.js WebSocket server with in-memory matchmaking queues and active rooms
 - `client/`: Vite browser client with name/preset/play flow and canvas rendering
-- `tests/`: Vitest unit tests for shared engine behavior
+- `tests/`: Vitest unit tests for shared engine behavior and in-process WebSocket protocol coverage
 
 ## Matchmaking Presets
 
@@ -68,15 +68,15 @@ http://localhost:3000/health
 - No replay system yet.
 - No local AI/PvC route in the online client yet.
 - No account system, persistence, ratings, or reconnect/resume.
-- No end-to-end WebSocket tests yet.
+- No browser-driven end-to-end tests yet.
 - npm reported moderate dependency advisories; they were not force-fixed because that may introduce breaking changes.
 
 ## Suggested Next Steps
 
-1. Add protocol-level tests for matchmaking and move rejection.
-2. Port more of the original canvas polish into the online client.
-3. Add a local-vs-computer mode that uses the shared engine and a client-side AI.
-4. Add room cleanup, idle timeouts, and better disconnect/reconnect handling.
+1. Port more of the original canvas polish into the online client.
+2. Add a local-vs-computer mode that uses the shared engine and a client-side AI.
+3. Add room cleanup, idle timeouts, and better disconnect/reconnect handling.
+4. Add more server protocol tests for disconnects, invalid messages, and queue cancellation.
 5. Decide on first deployment target.
 
 ## Deployment Direction

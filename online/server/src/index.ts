@@ -1,5 +1,6 @@
 import http from "node:http";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { applyMove, createGame } from "../../shared/game/engine.js";
 import { isPresetId } from "../../shared/game/presets.js";
@@ -22,135 +23,146 @@ interface Room {
 }
 
 const PORT = Number(process.env.PORT ?? 3000);
-const queues = new Map<PresetId, Player[]>();
-const rooms = new Map<string, Room>();
-const players = new Map<string, Player>();
 
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true }));
-    return;
-  }
+export interface AirFightServer {
+  server: http.Server;
+  wss: WebSocketServer;
+  close: () => Promise<void>;
+}
 
-  res.writeHead(200, { "content-type": "text/plain" });
-  res.end("Air Fight Online server\n");
-});
+export function createAirFightServer(): AirFightServer {
+  const queues = new Map<PresetId, Player[]>();
+  const rooms = new Map<string, Room>();
+  const players = new Map<string, Player>();
 
-const wss = new WebSocketServer({ server, path: "/ws" });
-
-wss.on("connection", (socket) => {
-  const player: Player = {
-    id: randomUUID(),
-    name: "Player",
-    socket,
-    gameId: null,
-    team: null,
-  };
-  players.set(player.id, player);
-  send(player, { type: "hello", playerId: player.id });
-
-  socket.on("message", (raw) => {
-    const message = parseClientMessage(raw.toString());
-    if (!message) return;
-    handleMessage(player, message);
-  });
-
-  socket.on("close", () => {
-    removeFromQueues(player);
-    leaveRoom(player);
-    players.delete(player.id);
-  });
-});
-
-server.listen(PORT, () => {
-  console.log(`Air Fight Online server listening on http://localhost:${PORT}`);
-});
-
-function handleMessage(player: Player, message: ClientMessage): void {
-  if (message.type === "joinQueue") {
-    if (!isPresetId(message.presetId)) return;
-    player.name = cleanName(message.playerName);
-    removeFromQueues(player);
-    leaveRoom(player);
-    enqueue(player, message.presetId);
-    return;
-  }
-
-  if (message.type === "leaveQueue") {
-    removeFromQueues(player);
-    return;
-  }
-
-  if (message.type === "submitMove") {
-    const room = player.gameId ? rooms.get(player.gameId) : null;
-    if (!room || room.id !== message.gameId || !player.team) return;
-    const result = applyMove(room.state, player.team, message.move);
-    room.state = result.state;
-    if (!result.ok) {
-      send(player, { type: "moveRejected", reason: result.error ?? "Move rejected.", state: room.state });
+  const server = http.createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
-    broadcast(room, { type: "gameState", state: room.state, eliminated: result.eliminated });
+
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("Air Fight Online server\n");
+  });
+
+  const wss = new WebSocketServer({ server, path: "/ws" });
+
+  wss.on("connection", (socket) => {
+    const player: Player = {
+      id: randomUUID(),
+      name: "Player",
+      socket,
+      gameId: null,
+      team: null,
+    };
+    players.set(player.id, player);
+    send(player, { type: "hello", playerId: player.id });
+
+    socket.on("message", (raw) => {
+      const message = parseClientMessage(raw.toString());
+      if (!message) return;
+      handleMessage(player, message);
+    });
+
+    socket.on("close", () => {
+      removeFromQueues(player);
+      leaveRoom(player);
+      players.delete(player.id);
+    });
+  });
+
+  function handleMessage(player: Player, message: ClientMessage): void {
+    if (message.type === "joinQueue") {
+      if (!isPresetId(message.presetId)) return;
+      player.name = cleanName(message.playerName);
+      removeFromQueues(player);
+      leaveRoom(player);
+      enqueue(player, message.presetId);
+      return;
+    }
+
+    if (message.type === "leaveQueue") {
+      removeFromQueues(player);
+      return;
+    }
+
+    if (message.type === "submitMove") {
+      const room = player.gameId ? rooms.get(player.gameId) : null;
+      if (!room || room.id !== message.gameId || !player.team) return;
+      const result = applyMove(room.state, player.team, message.move);
+      room.state = result.state;
+      if (!result.ok) {
+        send(player, { type: "moveRejected", reason: result.error ?? "Move rejected.", state: room.state });
+        return;
+      }
+      broadcast(room, { type: "gameState", state: room.state, eliminated: result.eliminated });
+    }
   }
-}
 
-function enqueue(player: Player, presetId: PresetId): void {
-  const queue = queues.get(presetId) ?? [];
-  queues.set(presetId, queue);
+  function enqueue(player: Player, presetId: PresetId): void {
+    const queue = queues.get(presetId) ?? [];
+    queues.set(presetId, queue);
 
-  const opponent = queue.shift();
-  if (!opponent || opponent.socket.readyState !== opponent.socket.OPEN) {
-    queue.push(player);
-    send(player, { type: "queued", presetId });
-    return;
+    const opponent = queue.shift();
+    if (!opponent || opponent.socket.readyState !== opponent.socket.OPEN) {
+      queue.push(player);
+      send(player, { type: "queued", presetId });
+      return;
+    }
+
+    const roomId = randomUUID();
+    const state = createGame(roomId, presetId, randomSeed());
+    player.team = "blue";
+    opponent.team = "red";
+    player.gameId = roomId;
+    opponent.gameId = roomId;
+
+    const room: Room = {
+      id: roomId,
+      state,
+      players: { red: opponent, blue: player },
+    };
+    rooms.set(roomId, room);
+
+    send(opponent, { type: "matchFound", gameId: roomId, team: "red", opponentName: player.name, state });
+    send(player, { type: "matchFound", gameId: roomId, team: "blue", opponentName: opponent.name, state });
   }
 
-  const roomId = randomUUID();
-  const state = createGame(roomId, presetId, randomSeed());
-  player.team = "blue";
-  opponent.team = "red";
-  player.gameId = roomId;
-  opponent.gameId = roomId;
+  function leaveRoom(player: Player): void {
+    if (!player.gameId) return;
+    const room = rooms.get(player.gameId);
+    if (!room) {
+      player.gameId = null;
+      player.team = null;
+      return;
+    }
 
-  const room: Room = {
-    id: roomId,
-    state,
-    players: { red: opponent, blue: player },
-  };
-  rooms.set(roomId, room);
-
-  send(opponent, { type: "matchFound", gameId: roomId, team: "red", opponentName: player.name, state });
-  send(player, { type: "matchFound", gameId: roomId, team: "blue", opponentName: opponent.name, state });
-}
-
-function leaveRoom(player: Player): void {
-  if (!player.gameId) return;
-  const room = rooms.get(player.gameId);
-  if (!room) {
+    const opponent = player.team === "red" ? room.players.blue : room.players.red;
+    send(opponent, { type: "opponentDisconnected", state: room.state });
+    rooms.delete(room.id);
     player.gameId = null;
     player.team = null;
-    return;
+    opponent.gameId = null;
+    opponent.team = null;
   }
 
-  const opponent = player.team === "red" ? room.players.blue : room.players.red;
-  send(opponent, { type: "opponentDisconnected", state: room.state });
-  rooms.delete(room.id);
-  player.gameId = null;
-  player.team = null;
-  opponent.gameId = null;
-  opponent.team = null;
-}
-
-function removeFromQueues(player: Player): void {
-  for (const [presetId, queue] of queues) {
-    queues.set(presetId, queue.filter((queuedPlayer) => queuedPlayer.id !== player.id));
+  function removeFromQueues(player: Player): void {
+    for (const [presetId, queue] of queues) {
+      queues.set(presetId, queue.filter((queuedPlayer) => queuedPlayer.id !== player.id));
+    }
   }
-}
 
-function broadcast(room: Room, message: ServerMessage): void {
-  send(room.players.red, message);
-  send(room.players.blue, message);
+  function broadcast(room: Room, message: ServerMessage): void {
+    send(room.players.red, message);
+    send(room.players.blue, message);
+  }
+
+  return {
+    server,
+    wss,
+    close: () => closeServer(server, wss),
+  };
 }
 
 function send(player: Player, message: ServerMessage): void {
@@ -171,4 +183,29 @@ function parseClientMessage(raw: string): ClientMessage | null {
 function cleanName(value: string): string {
   const trimmed = value.trim().slice(0, 24);
   return trimmed || "Player";
+}
+
+function closeServer(server: http.Server, wss: WebSocketServer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    wss.clients.forEach((client) => client.close());
+    wss.close((wssError) => {
+      if (!server.listening) {
+        if (wssError) reject(wssError);
+        else resolve();
+        return;
+      }
+      server.close((serverError) => {
+        const error = wssError ?? serverError;
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  });
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const { server } = createAirFightServer();
+  server.listen(PORT, () => {
+    console.log(`Air Fight Online server listening on http://localhost:${PORT}`);
+  });
 }
