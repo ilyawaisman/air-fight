@@ -9,7 +9,7 @@
   <body>
     <div id="settingsBackdrop" class="settings-backdrop"></div>
     <div class="mobile-top-bar">
-      <div class="mobile-brand">Air Fight <span class="version">v1.3.16 online</span></div>
+      <div class="mobile-brand">Air Fight <span class="version">v1.4.1 online</span></div>
       <div class="mobile-status" id="mobileStatus">
         <span style="color: var(--red); font-weight: 800;" id="mobileRedStats"></span>
         <span style="color: var(--border); margin: 0 4px;">|</span>
@@ -21,7 +21,7 @@
       <section class="control-panel" aria-label="Game controls">
         <button id="closeSettings" class="close-btn" type="button" aria-label="Close settings">&times;</button>
         <div class="brand">
-          <h1>Air Fight <span class="version">v1.3.16 online</span></h1>
+          <h1>Air Fight <span class="version">v1.4.1 online</span></h1>
           <p>Quad-ruled paper dogfight</p>
         </div>
 
@@ -102,16 +102,13 @@
               <option value="none">None</option>
               <option value="big">Big</option>
               <option value="small">Small</option>
-              <option value="any" selected>Any</option>
+              <option value="mixed" selected>Mixed</option>
             </select>
           </label>
 
-          <label class="local-only">
-            Distance
-            <select id="metric">
-              <option value="linf" selected>L infinity</option>
-              <option value="taxicab">Taxicab</option>
-            </select>
+          <label class="checkbox-label local-only">
+            <input id="showTurretZones" type="checkbox" checked>
+            <span>Show attack zones</span>
           </label>
 
           <label id="nameField" class="network-only">

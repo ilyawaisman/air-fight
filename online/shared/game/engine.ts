@@ -8,7 +8,7 @@ const OBSTACLE_CONFIGS: Record<ObstacleType, { density: number; minSize: number;
   none: { density: 0, minSize: 0, maxSize: 0 },
   big: { density: 3, minSize: 20, maxSize: 40 },
   small: { density: 7.5, minSize: 3, maxSize: 10 },
-  any: { density: 6, minSize: 3, maxSize: 40 },
+  mixed: { density: 6, minSize: 3, maxSize: 40 },
 };
 
 export function createGame(id: string, presetId: PresetId, seed: number): GameState {
@@ -228,14 +228,14 @@ function resolveCombat(state: GameState, mover: Token, start: Point, boundaryCra
 
   if (mover.alive && mover.type === "plane") {
     for (const target of state.tokens) {
-      if (target.alive && target.team !== mover.team && distance(state, mover, target) <= HIT_RADIUS) eliminate(target, eliminated);
+      if (target.alive && target.team !== mover.team && distanceLInf(mover, target) <= HIT_RADIUS) eliminate(target, eliminated);
     }
   }
 
   for (const plane of state.tokens) {
     if (!plane.alive || plane.type !== "plane") continue;
     for (const turret of state.tokens) {
-      if (turret.alive && turret.type === "turret" && turret.team !== plane.team && distance(state, plane, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(state, turret, plane)) {
+      if (turret.alive && turret.type === "turret" && turret.team !== plane.team && distanceManhattan(plane, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(state, turret, plane)) {
         eliminate(plane, eliminated);
         break;
       }
@@ -256,7 +256,7 @@ function resolveForcedCrashes(state: GameState, eliminated: string[]): void {
     const intended = { x: token.x + token.vx, y: token.y + token.vy };
     const boundaryImpact = boundaryImpactPoint(state, start, intended);
     const obstacleImpact = obstacleImpactPoint(state, start, intended);
-    if (pathIntersectsObstacles(state, start, intended) && distance(state, start, obstacleImpact) < distance(state, start, boundaryImpact)) {
+    if (pathIntersectsObstacles(state, start, intended) && distanceLInf(start, obstacleImpact) < distanceLInf(start, boundaryImpact)) {
       smashPlaneAtObstacle(state, token, start, intended);
     } else {
       smashPlaneAtBoundary(state, token, start, intended);
@@ -431,10 +431,14 @@ function insideBoundary(state: GameState, point: Point): boolean {
   return point.x >= -epsilon && point.y >= -epsilon && point.x <= state.width + epsilon && point.y <= state.height + epsilon;
 }
 
-function distance(state: GameState, a: Point, b: Point): number {
+function distanceManhattan(a: Point, b: Point): number {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function distanceLInf(a: Point, b: Point): number {
   const dx = Math.abs(a.x - b.x);
   const dy = Math.abs(a.y - b.y);
-  return state.metric === "taxicab" ? dx + dy : Math.max(dx, dy);
+  return Math.max(dx, dy);
 }
 
 function evenPoint(index: number, count: number, width: number): number {

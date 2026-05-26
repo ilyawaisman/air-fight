@@ -17,9 +17,9 @@ This file captures the state needed to continue development on another machine.
 
 ## Matchmaking Presets
 
-- Duel: `24x24`, `1` plane, `0` turrets, `any` obstacles
-- Classic: `24x48`, `3` planes, `1` turret, `any` obstacles
-- Tactical: `28x56`, `7` planes, `1` turret, `any` obstacles
+- Duel: `24x24`, `1` plane, `0` turrets, `mixed` obstacles
+- Classic: `24x48`, `3` planes, `1` turret, `mixed` obstacles
+- Tactical: `28x56`, `7` planes, `1` turret, `mixed` obstacles
 
 ## Important Design Decisions
 

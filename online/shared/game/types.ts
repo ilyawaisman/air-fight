@@ -2,7 +2,7 @@ export type Team = "red" | "blue";
 export type TokenType = "plane" | "turret";
 export type Metric = "linf" | "taxicab";
 export type PresetId = "duel" | "classic" | "tactical";
-export type ObstacleType = "none" | "big" | "small" | "any";
+export type ObstacleType = "none" | "big" | "small" | "mixed";
 
 export interface Point {
   x: number;

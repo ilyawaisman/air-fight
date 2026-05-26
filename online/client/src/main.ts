@@ -1,10 +1,11 @@
 import "../src/styles.css";
 import { activeToken, applyMove, cloneState, createGame, createGameFromPreset, legalMoves } from "../../shared/game/engine.js";
 import { GAME_PRESETS, isPresetId } from "../../shared/game/presets.js";
-import type { GamePreset, GameState, Metric, Move, ObstacleType, PresetId, Team, Token } from "../../shared/game/types.js";
+import type { GamePreset, GameState, Move, ObstacleType, PresetId, Team, Token } from "../../shared/game/types.js";
 import type { ClientMessage, ServerMessage } from "../../shared/protocol.js";
 
 type PlayMode = "computer" | "local" | "network";
+const TURRET_RADIUS = 5;
 
 const canvas = document.querySelector<HTMLCanvasElement>("#board")!;
 const ctx = canvas.getContext("2d")!;
@@ -16,7 +17,7 @@ const controls = {
   planes: document.querySelector<HTMLSelectElement>("#planeCount")!,
   turrets: document.querySelector<HTMLSelectElement>("#turretCount")!,
   obstacles: document.querySelector<HTMLSelectElement>("#obstacles")!,
-  metric: document.querySelector<HTMLSelectElement>("#metric")!,
+  showTurretZones: document.querySelector<HTMLInputElement>("#showTurretZones")!,
   playerName: document.querySelector<HTMLInputElement>("#playerName")!,
   mapOption: document.getElementsByName("mapOption") as NodeListOf<HTMLInputElement>,
   networkPreset: document.getElementsByName("networkPreset") as NodeListOf<HTMLInputElement>,
@@ -118,6 +119,7 @@ function bindControls(): void {
   controls.turrets.addEventListener("change", () => {
     selectedPreset = presetFromControls();
   });
+  controls.showTurretZones.addEventListener("change", draw);
 
   controls.newGame.forEach((button) => {
     button.addEventListener("click", () => {
@@ -240,17 +242,13 @@ function localPresetFromControls(): GamePreset {
     planes: clamp(Number(controls.planes.value) || 3, 1, 7),
     turrets: clamp(Number(controls.turrets.value) || 1, 0, 2),
     obstacles: obstacleTypeFromControls(),
-    metric: metricFromControls(),
+    metric: "linf",
   };
 }
 
 function obstacleTypeFromControls(): ObstacleType {
   const value = controls.obstacles.value;
-  return value === "none" || value === "big" || value === "small" || value === "any" ? value : "any";
-}
-
-function metricFromControls(): Metric {
-  return controls.metric.value === "taxicab" ? "taxicab" : "linf";
+  return value === "none" || value === "big" || value === "small" || value === "mixed" ? value : "mixed";
 }
 
 function startLocalGame(): void {
@@ -453,8 +451,8 @@ function chooseComputerMove(moves: Move[]): Move | null {
 function scoreMove(token: Token, move: Move): number {
   if (!state) return 0;
   const enemies = state.tokens.filter((item) => item.alive && item.team !== token.team);
-  const nearest = enemies.reduce((best, enemy) => Math.min(best, distance(move, enemy)), Infinity);
-  const centerBias = -distance(move, { x: state.width / 2, y: state.height / 2 }) * 0.05;
+  const nearest = enemies.reduce((best, enemy) => Math.min(best, token.type === "turret" ? distanceManhattan(move, enemy) : distanceLInf(move, enemy)), Infinity);
+  const centerBias = -distanceLInf(move, { x: state.width / 2, y: state.height / 2 }) * 0.05;
   const aggression = Number.isFinite(nearest) ? -nearest : 0;
   return aggression + centerBias + Math.random() * 0.2;
 }
@@ -581,10 +579,43 @@ function draw(): void {
     return;
   }
   drawPaper(geo);
+  drawTurretZones(geo);
   drawObstacles(geo);
   drawTrajectories(geo);
   drawHighlights(geo);
   drawTokens(geo);
+}
+
+function drawTurretZones(geo: ReturnType<typeof boardGeometry>): void {
+  if (!state || !controls.showTurretZones.checked) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(geo.left, geo.top, state.width * geo.cell, state.height * geo.cell);
+  ctx.clip();
+
+  for (const token of state.tokens) {
+    if (!token.alive || token.type !== "turret") continue;
+    const right = gridToPixel({ x: token.x + TURRET_RADIUS, y: token.y }, geo);
+    const top = gridToPixel({ x: token.x, y: token.y + TURRET_RADIUS }, geo);
+    const left = gridToPixel({ x: token.x - TURRET_RADIUS, y: token.y }, geo);
+    const bottom = gridToPixel({ x: token.x, y: token.y - TURRET_RADIUS }, geo);
+
+    ctx.beginPath();
+    ctx.moveTo(right.x, right.y);
+    ctx.lineTo(top.x, top.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.lineTo(bottom.x, bottom.y);
+    ctx.closePath();
+    ctx.fillStyle = token.team === "red" ? "rgba(212, 61, 61, 0.05)" : "rgba(37, 99, 199, 0.05)";
+    ctx.fill();
+    ctx.strokeStyle = TEAM[token.team].color;
+    ctx.lineWidth = 1.5 * geo.dpr;
+    ctx.setLineDash([4 * geo.dpr, 4 * geo.dpr]);
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 function boardGeometry() {
@@ -840,8 +871,12 @@ function send(message: ClientMessage): void {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
-function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+function distanceLInf(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+function distanceManhattan(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
 function clamp(value: number, min: number, max: number): number {

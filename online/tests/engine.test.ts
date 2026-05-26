@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyMove, createGame, legalMoves } from "../shared/game/engine.js";
+import { applyMove, createGame, createGameFromPreset, legalMoves } from "../shared/game/engine.js";
+import type { GamePreset } from "../shared/game/types.js";
 
 describe("shared engine", () => {
   it("creates deterministic obstacle maps for a seed", () => {
@@ -33,5 +34,35 @@ describe("shared engine", () => {
     const result = applyMove(game, "blue", move);
     expect(result.ok).toBe(false);
     expect(result.error).toContain("not your turn");
+  });
+
+  it("uses L-infinity distance for plane hits regardless of field metric", () => {
+    const preset: GamePreset = { id: "duel", label: "Test", width: 12, height: 12, planes: 1, turrets: 0, obstacles: "none", metric: "taxicab" };
+    const game = createGameFromPreset("game", preset, 1);
+    const redPlane = game.tokens.find((token) => token.id === "p1")!;
+    const bluePlane = game.tokens.find((token) => token.id === "p2")!;
+    Object.assign(redPlane, { x: 5, y: 4, vx: 0, vy: 0, history: [{ x: 5, y: 4 }] });
+    Object.assign(bluePlane, { x: 6, y: 6, vx: 0, vy: 0, history: [{ x: 6, y: 6 }] });
+
+    const result = applyMove(game, "red", { x: 5, y: 5 });
+
+    expect(result.ok).toBe(true);
+    expect(result.state.tokens.find((token) => token.id === "p2")?.alive).toBe(false);
+  });
+
+  it("uses Manhattan distance for turret attack range", () => {
+    const preset: GamePreset = { id: "classic", label: "Test", width: 12, height: 12, planes: 1, turrets: 1, obstacles: "none", metric: "linf" };
+    const game = createGameFromPreset("game", preset, 1);
+    const redPlane = game.tokens.find((token) => token.id === "p1")!;
+    const redTurret = game.tokens.find((token) => token.id === "t2")!;
+    const bluePlane = game.tokens.find((token) => token.id === "p3")!;
+    Object.assign(redPlane, { x: 9, y: 9, vx: 0, vy: 0, history: [{ x: 9, y: 9 }] });
+    Object.assign(redTurret, { x: 0, y: 0 });
+    Object.assign(bluePlane, { x: 4, y: 4, vx: 0, vy: 0, history: [{ x: 4, y: 4 }] });
+
+    const result = applyMove(game, "red", { x: 9, y: 10 });
+
+    expect(result.ok).toBe(true);
+    expect(result.state.tokens.find((token) => token.id === "p3")?.alive).toBe(true);
   });
 });

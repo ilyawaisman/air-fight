@@ -8,7 +8,7 @@ export const GAME_PRESETS: Record<PresetId, GamePreset> = {
     height: 24,
     planes: 1,
     turrets: 0,
-    obstacles: "any",
+    obstacles: "mixed",
     metric: "linf",
   },
   classic: {
@@ -18,7 +18,7 @@ export const GAME_PRESETS: Record<PresetId, GamePreset> = {
     height: 48,
     planes: 3,
     turrets: 1,
-    obstacles: "any",
+    obstacles: "mixed",
     metric: "linf",
   },
   tactical: {
@@ -28,7 +28,7 @@ export const GAME_PRESETS: Record<PresetId, GamePreset> = {
     height: 56,
     planes: 7,
     turrets: 1,
-    obstacles: "any",
+    obstacles: "mixed",
     metric: "linf",
   },
 };
