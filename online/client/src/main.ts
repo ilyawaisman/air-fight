@@ -86,6 +86,8 @@ const KEY_MAP = {
 
 const REPLAY_SPEEDS = [1, 2, 4, 8] as const;
 const REPLAY_STEP_MS = 520;
+const REPLAY_ANIMATION_MS = 220;
+const LONG_TOUCH_MS = 600;
 
 let mode: PlayMode = "computer";
 let selectedPreset: PresetId = "classic";
@@ -96,13 +98,20 @@ let aiTimer = 0;
 let gameId: string | null = null;
 let myTeam: Team | null = null;
 let highlightedMoves: Move[] = [];
+let draggedMove: Move | null = null;
 let history: GameState[] = [];
 let replaying = false;
 let replayTimer = 0;
+let replayAnimationFrame = 0;
 let effectsFrame = 0;
 let speedIndex = 0;
 let explosions: ExplosionEffect[] = [];
 let lasers: LaserEffect[] = [];
+let touchStartX = 0;
+let touchStartY = 0;
+let isSwiping = false;
+let longTouchTimer = 0;
+let longTouchActive = false;
 
 applyModeUi();
 startLocalGame();
@@ -143,9 +152,7 @@ function bindControls(): void {
 
   controls.newGame.forEach((button) => {
     button.addEventListener("click", () => {
-      stopReplay();
-      if (mode === "network") joinQueue();
-      else startLocalGame();
+      newGameAction();
     });
   });
 
@@ -158,10 +165,7 @@ function bindControls(): void {
 
   canvas.addEventListener("click", (event) => {
     if (replaying) return;
-    const move = highlightedMoves.find((candidate) => {
-      const point = eventToGrid(event);
-      return candidate.x === point.x && candidate.y === point.y;
-    });
+    const move = moveAtPoint(eventToGrid(event));
     if (!move) {
       labels.message.textContent = "Choose one of the highlighted points.";
       return;
@@ -170,10 +174,29 @@ function bindControls(): void {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (replaying) return;
     const target = event.target;
     if (target instanceof HTMLSelectElement) return;
     if (target instanceof HTMLInputElement && (target.type === "text" || target.type === "number")) return;
+
+    if ((event.key === "n" || event.key === "N") && !replaying) {
+      event.preventDefault();
+      newGameAction();
+      return;
+    }
+
+    if ((event.key === "r" || event.key === "R") && !replaying && history.length >= 2) {
+      event.preventDefault();
+      startReplay();
+      return;
+    }
+
+    if (event.code === "Space" && state?.gameOver) {
+      event.preventDefault();
+      showPersistentBannerOnly();
+      return;
+    }
+
+    if (replaying) return;
     const key = KEY_MAP[event.code as keyof typeof KEY_MAP];
     if (!key || !state) return;
     const token = activeToken(state);
@@ -213,6 +236,21 @@ function bindControls(): void {
   });
   closeSettings?.addEventListener("click", closePanel);
   backdrop?.addEventListener("click", closePanel);
+
+  document.getElementsByName("mapOption").forEach((input) => {
+    input.addEventListener("change", () => syncMapOptions("mapOption", "mapOptionMobile"));
+  });
+  document.getElementsByName("mapOptionMobile").forEach((input) => {
+    input.addEventListener("change", () => syncMapOptions("mapOptionMobile", "mapOption"));
+  });
+
+  bindTouchControls();
+}
+
+function newGameAction(): void {
+  stopReplay();
+  if (mode === "network") joinQueue();
+  else startLocalGame();
 }
 
 function selectedMode(): PlayMode {
@@ -296,6 +334,7 @@ function startLocalGame(): void {
 
 function applyRestartMapOption(previousState: GameState | null, nextState: GameState): void {
   if (!previousState || previousState.width !== nextState.width || previousState.height !== nextState.height) return;
+  syncMapOptions("mapOptionMobile", "mapOption");
   const option = Array.from(controls.mapOption).find((input) => input.checked)?.value ?? "new";
   if (option === "keep") {
     nextState.obstacles = [...previousState.obstacles];
@@ -307,6 +346,15 @@ function applyRestartMapOption(previousState: GameState | null, nextState: GameS
       return `${nextState.width - 1 - cx},${nextState.height - 1 - cy}`;
     });
   }
+}
+
+function syncMapOptions(sourceName: string, targetName: string): void {
+  const source = document.getElementsByName(sourceName) as NodeListOf<HTMLInputElement>;
+  const target = document.getElementsByName(targetName) as NodeListOf<HTMLInputElement>;
+  const value = Array.from(source).find((input) => input.checked)?.value;
+  if (!value) return;
+  const match = Array.from(target).find((input) => input.value === value);
+  if (match) match.checked = true;
 }
 
 function resetNetworkGame(): void {
@@ -631,19 +679,16 @@ function startReplay(): void {
       stopReplay();
       return;
     }
-    const previous = index > 0 ? history[index - 1] : null;
-    state = cloneState(frame);
-    if (previous) addEffectsFromTransition(previous, state, eliminatedBetween(previous, state));
-    highlightedMoves = [];
-    updateStatus();
-    draw();
-    index += 1;
+    const previous = index > 0 ? history[index - 1] ?? null : null;
     const delay = REPLAY_STEP_MS / replaySpeed();
-    if (index >= history.length) {
-      replayTimer = window.setTimeout(stopReplay, delay);
-      return;
-    }
-    replayTimer = window.setTimeout(step, delay);
+    animateReplayFrame(previous, frame, () => {
+      index += 1;
+      if (index >= history.length) {
+        replayTimer = window.setTimeout(stopReplay, delay);
+        return;
+      }
+      replayTimer = window.setTimeout(step, Math.max(0, delay - REPLAY_ANIMATION_MS / replaySpeed()));
+    });
   };
 
   step();
@@ -653,6 +698,10 @@ function stopReplay(): void {
   if (!replaying) return;
   replaying = false;
   window.clearTimeout(replayTimer);
+  if (replayAnimationFrame) {
+    cancelAnimationFrame(replayAnimationFrame);
+    replayAnimationFrame = 0;
+  }
   clearEffects();
   const latest = history.at(-1);
   if (latest) state = cloneState(latest);
@@ -661,6 +710,56 @@ function stopReplay(): void {
   updateReplayControls();
   draw();
   scheduleComputerMove();
+}
+
+function animateReplayFrame(previous: GameState | null, frame: GameState, done: () => void): void {
+  if (!previous) {
+    state = cloneState(frame);
+    highlightedMoves = [];
+    updateStatus();
+    draw();
+    done();
+    return;
+  }
+
+  const started = performance.now();
+  const duration = REPLAY_ANIMATION_MS / replaySpeed();
+  const tick = (now: number) => {
+    const progress = Math.min(1, (now - started) / duration);
+    state = interpolateStates(previous, frame, progress);
+    highlightedMoves = [];
+    updateStatus();
+    draw();
+
+    if (progress < 1) {
+      replayAnimationFrame = requestAnimationFrame(tick);
+      return;
+    }
+
+    state = cloneState(frame);
+    addEffectsFromTransition(previous, state, eliminatedBetween(previous, state));
+    updateStatus();
+    draw();
+    done();
+  };
+
+  if (replayAnimationFrame) cancelAnimationFrame(replayAnimationFrame);
+  replayAnimationFrame = requestAnimationFrame(tick);
+}
+
+function interpolateStates(before: GameState, after: GameState, progress: number): GameState {
+  const interpolated = cloneState(after);
+  interpolated.tokens = after.tokens.map((afterToken) => {
+    const beforeToken = before.tokens.find((token) => token.id === afterToken.id) ?? afterToken;
+    return {
+      ...afterToken,
+      x: beforeToken.x + (afterToken.x - beforeToken.x) * progress,
+      y: beforeToken.y + (afterToken.y - beforeToken.y) * progress,
+      vx: progress < 1 ? beforeToken.vx : afterToken.vx,
+      vy: progress < 1 ? beforeToken.vy : afterToken.vy,
+    };
+  });
+  return interpolated;
 }
 
 function updateReplayControls(): void {
@@ -867,10 +966,21 @@ function drawHighlights(geo: ReturnType<typeof boardGeometry>): void {
 
   for (const move of highlightedMoves) {
     const p = gridToPixel(move, geo);
-    ctx.fillStyle = TEAM[token.team].pale;
+    const isDragged = draggedMove?.x === move.x && draggedMove.y === move.y;
+    ctx.fillStyle = isDragged ? TEAM[token.team].color : TEAM[token.team].pale;
+    ctx.globalAlpha = isDragged ? 0.35 : 1;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, Math.max(5 * geo.dpr, geo.cell * 0.35), 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, Math.max(5 * geo.dpr, geo.cell * 0.35) * (isDragged ? 1.25 : 1), 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
+
+    if (isDragged) {
+      ctx.strokeStyle = TEAM[token.team].color;
+      ctx.lineWidth = 2.5 * geo.dpr;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(5 * geo.dpr, geo.cell * 0.35) * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     const dx = move.x - anchor.x;
     const dy = move.y - anchor.y;
@@ -902,6 +1012,17 @@ function drawHighlights(geo: ReturnType<typeof boardGeometry>): void {
   ctx.beginPath();
   ctx.arc(p.x, p.y, Math.max(7 * geo.dpr, geo.cell * 0.45), 0, Math.PI * 2);
   ctx.stroke();
+
+  if (draggedMove) {
+    const fromPos = gridToPixel(anchor, geo);
+    const toPos = gridToPixel(draggedMove, geo);
+    ctx.strokeStyle = TEAM[token.team].color;
+    ctx.lineWidth = 3 * geo.dpr;
+    ctx.beginPath();
+    ctx.moveTo(fromPos.x, fromPos.y);
+    ctx.lineTo(toPos.x, toPos.y);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -1049,7 +1170,7 @@ function turretAngle(token: Token): number {
   return token.team === "red" ? -Math.PI / 2 : Math.PI / 2;
 }
 
-function eventToGrid(event: MouseEvent): { x: number; y: number } {
+function eventToGrid(event: Pick<MouseEvent | Touch, "clientX" | "clientY">): { x: number; y: number } {
   const geo = boardGeometry();
   const rect = canvas.getBoundingClientRect();
   const px = (event.clientX - rect.left) * geo.dpr;
@@ -1087,8 +1208,170 @@ function hideEndGameUI(): void {
   endGame.container.classList.remove("winner-red", "winner-blue", "winner-draw");
 }
 
+function showPersistentBannerOnly(): void {
+  if (!state?.gameOver) return;
+  const outcome = state.winner ?? "draw";
+  endGame.overlay.classList.remove("active");
+  endGame.container.classList.remove("winner-red", "winner-blue", "winner-draw");
+  endGame.container.classList.add(`winner-${outcome}`);
+  endGame.banner.className = `end-game-banner active banner-${outcome} no-delay`;
+  endGame.bannerText.textContent = outcome === "draw" ? "Draw" : `${TEAM[outcome].name} Team Won`;
+}
+
 function send(message: ClientMessage): void {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+}
+
+function bindTouchControls(): void {
+  const swipeTarget = endGame.container;
+  let swipeOverlay = document.querySelector<HTMLElement>("#swipeOverlay");
+  if (!swipeOverlay) {
+    swipeOverlay = document.createElement("div");
+    swipeOverlay.id = "swipeOverlay";
+    swipeOverlay.className = "swipe-overlay";
+    document.body.appendChild(swipeOverlay);
+  }
+
+  swipeTarget.addEventListener("touchstart", (event) => {
+    if (!state || replaying || !canTouchMove()) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    isSwiping = true;
+    draggedMove = null;
+    longTouchActive = false;
+    window.clearTimeout(longTouchTimer);
+
+    if (!state.gameOver) {
+      longTouchTimer = window.setTimeout(() => {
+        if (!isSwiping || !state || !canMoveNow()) return;
+        const token = activeToken(state);
+        if (!token) return;
+        const anchor = token.type === "plane" ? { x: token.x + token.vx, y: token.y + token.vy } : token;
+        const keepSpeedMove = highlightedMoves.find((move) => move.x === anchor.x && move.y === anchor.y);
+        if (!keepSpeedMove) return;
+        longTouchActive = true;
+        navigator.vibrate?.(40);
+        submitMove(keepSpeedMove);
+        isSwiping = false;
+      }, LONG_TOUCH_MS);
+    }
+  });
+
+  swipeTarget.addEventListener("touchmove", (event) => {
+    if (!isSwiping || !state) return;
+    if (event.cancelable) event.preventDefault();
+    const touch = event.touches[0];
+    if (!touch) return;
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist > 10) {
+      window.clearTimeout(longTouchTimer);
+      longTouchTimer = 0;
+    }
+
+    if (state.gameOver) {
+      if (dist >= 10 && Math.abs(dy) > Math.abs(dx)) {
+        swipeOverlay?.classList.add("visible");
+        if (swipeOverlay) swipeOverlay.textContent = dy > 0 ? "Swipe for New Game" : "Swipe for Replay";
+      }
+      return;
+    }
+
+    const move = swipeMoveFromDelta(dx, dy, dist);
+    if (move && (!draggedMove || draggedMove.x !== move.x || draggedMove.y !== move.y)) {
+      draggedMove = move;
+      draw();
+    } else if (!move && draggedMove) {
+      draggedMove = null;
+      draw();
+    }
+  }, { passive: false });
+
+  swipeTarget.addEventListener("touchend", (event) => {
+    window.clearTimeout(longTouchTimer);
+    longTouchTimer = 0;
+
+    if (longTouchActive) {
+      longTouchActive = false;
+      return;
+    }
+    if (!isSwiping || !state) return;
+    isSwiping = false;
+    swipeOverlay?.classList.remove("visible");
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    const dist = Math.hypot(dx, dy);
+
+    if (state.gameOver) {
+      if (dist >= 30 && Math.abs(dy) > Math.abs(dx)) {
+        if (dy > 0) newGameAction();
+        else startReplay();
+      }
+      return;
+    }
+
+    if (dist < 15) {
+      const move = moveAtPoint(eventToGrid(touch));
+      if (move) {
+        if (event.cancelable) event.preventDefault();
+        submitMove(move);
+      }
+    } else if (draggedMove) {
+      if (event.cancelable) event.preventDefault();
+      submitMove(draggedMove);
+    }
+
+    draggedMove = null;
+    draw();
+  });
+
+  swipeTarget.addEventListener("touchcancel", () => {
+    isSwiping = false;
+    longTouchActive = false;
+    window.clearTimeout(longTouchTimer);
+    longTouchTimer = 0;
+    draggedMove = null;
+    swipeOverlay?.classList.remove("visible");
+    draw();
+  });
+}
+
+function canTouchMove(): boolean {
+  if (!state) return false;
+  if (state.gameOver) return mode !== "network" || history.length >= 2;
+  return canMoveNow();
+}
+
+function swipeMoveFromDelta(dx: number, dy: number, dist: number): Move | null {
+  if (!state || dist < 30) return null;
+  const token = activeToken(state);
+  if (!token) return null;
+  const anchor = token.type === "plane" ? { x: token.x + token.vx, y: token.y + token.vy } : token;
+  const angle = Math.atan2(-dy, dx);
+  const octant = Math.round(angle / (Math.PI / 4));
+  const offsets: Record<number, { dx: number; dy: number }> = {
+    0: { dx: 1, dy: 0 },
+    1: { dx: 1, dy: 1 },
+    2: { dx: 0, dy: 1 },
+    3: { dx: -1, dy: 1 },
+    4: { dx: -1, dy: 0 },
+    [-4]: { dx: -1, dy: 0 },
+    [-3]: { dx: -1, dy: -1 },
+    [-2]: { dx: 0, dy: -1 },
+    [-1]: { dx: 1, dy: -1 },
+  };
+  const offset = offsets[octant] ?? { dx: 0, dy: 0 };
+  return highlightedMoves.find((move) => move.x === anchor.x + offset.dx && move.y === anchor.y + offset.dy) ?? null;
+}
+
+function moveAtPoint(point: { x: number; y: number }): Move | null {
+  return highlightedMoves.find((candidate) => candidate.x === point.x && candidate.y === point.y) ?? null;
 }
 
 function addEffectsFromTransition(before: GameState, after: GameState, eliminatedIds: string[]): void {
