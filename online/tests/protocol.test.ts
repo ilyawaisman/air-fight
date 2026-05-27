@@ -72,8 +72,22 @@ describe("websocket protocol", () => {
     clients.push(red, blue);
     await Promise.all([red.open(), blue.open()]);
     await Promise.all([red.next("hello"), blue.next("hello")]);
+    await Promise.all([red.next("queueStatus"), blue.next("queueStatus")]);
     return [red, blue];
   }
+
+  it("reports queue counts excluding the current player", async () => {
+    const [red, blue] = await connectClients();
+
+    red.send({ type: "joinQueue", playerName: "Ada", presetId: "duel" });
+    await red.next("queued");
+
+    const redStatus = await red.next("queueStatus");
+    const blueStatus = await blue.next("queueStatus");
+
+    expect(redStatus).toMatchObject({ type: "queueStatus", counts: { duel: 0 } });
+    expect(blueStatus).toMatchObject({ type: "queueStatus", counts: { duel: 1 } });
+  });
 
   it("matches two players in the same preset queue", async () => {
     const [red, blue] = await connectClients();

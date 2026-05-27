@@ -8,6 +8,7 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "hello"; playerId: string }
+  | { type: "queueStatus"; counts: Record<PresetId, number> }
   | { type: "queued"; presetId: PresetId }
   | { type: "matchFound"; gameId: string; team: Team; opponentName: string; state: GameState }
   | { type: "gameState"; state: GameState; eliminated: string[] }

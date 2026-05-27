@@ -220,6 +220,25 @@ select {
   margin-bottom: 2px;
 }
 
+.queue-count {
+  display: none;
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(47, 133, 90, 0.12);
+  color: var(--green);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.queue-count.visible {
+  display: inline-block;
+}
+
 .mode-segmented label span {
   font-size: 10px;
 }

@@ -57,6 +57,7 @@ const controls = {
   chatToggle: document.querySelector<HTMLButtonElement>("#chatToggle")!,
   chatClose: document.querySelector<HTMLButtonElement>("#closeChat")!,
   mobileChatClose: document.querySelector<HTMLButtonElement>("#closeMobileChat")!,
+  queueCounts: document.querySelectorAll<HTMLElement>(".queue-count"),
   presetButtons: document.querySelectorAll<HTMLButtonElement>(".preset-btn"),
   networkOnly: document.querySelectorAll<HTMLElement>(".network-only"),
   localOnly: document.querySelectorAll<HTMLElement>(".local-only"),
@@ -113,6 +114,7 @@ let aiTimer = 0;
 let gameId: string | null = null;
 let myTeam: Team | null = null;
 let queueing = false;
+let queueCounts: Record<PresetId, number> = { duel: 0, classic: 0, tactical: 0 };
 let highlightedMoves: Move[] = [];
 let draggedMove: Move | null = null;
 let history: GameState[] = [];
@@ -472,6 +474,12 @@ function defaultWebSocketHost(): string {
 }
 
 function handleServerMessage(message: ServerMessage): void {
+  if (message.type === "queueStatus") {
+    queueCounts = message.counts;
+    renderQueueCounts();
+    return;
+  }
+
   if (mode !== "network") return;
   if (message.type === "queued") {
     queueing = true;
@@ -877,6 +885,7 @@ function updateNetworkControls(): void {
     button.disabled = !canChat;
   });
   controls.chatToggle.disabled = mode !== "network" || chatLines.length === 0;
+  renderQueueCounts();
 }
 
 function networkActionLabel(): string {
@@ -884,6 +893,16 @@ function networkActionLabel(): string {
   if (gameId && state && !state.gameOver) return "Leave Game";
   if (queueing) return "Leave Queue";
   return "Queue";
+}
+
+function renderQueueCounts(): void {
+  controls.queueCounts.forEach((element) => {
+    const presetId = element.dataset.presetCount;
+    if (!presetId || !isPresetId(presetId)) return;
+    const count = queueCounts[presetId];
+    element.textContent = count === 1 ? "1 waiting" : `${count} waiting`;
+    element.classList.toggle("visible", mode === "network" && count > 0);
+  });
 }
 
 function sendChatMessage(form: HTMLFormElement): void {

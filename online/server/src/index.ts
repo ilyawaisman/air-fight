@@ -62,6 +62,7 @@ export function createAirFightServer(): AirFightServer {
     };
     players.set(player.id, player);
     send(player, { type: "hello", playerId: player.id });
+    sendQueueStatus();
 
     socket.on("message", (raw) => {
       const message = parseClientMessage(raw.toString());
@@ -73,6 +74,7 @@ export function createAirFightServer(): AirFightServer {
       removeFromQueues(player);
       leaveRoom(player);
       players.delete(player.id);
+      sendQueueStatus();
     });
   });
 
@@ -83,12 +85,14 @@ export function createAirFightServer(): AirFightServer {
       removeFromQueues(player);
       leaveRoom(player);
       enqueue(player, message.presetId);
+      sendQueueStatus();
       return;
     }
 
     if (message.type === "leaveQueue") {
       removeFromQueues(player);
       leaveRoom(player);
+      sendQueueStatus();
       return;
     }
 
@@ -171,6 +175,24 @@ export function createAirFightServer(): AirFightServer {
     for (const [presetId, queue] of queues) {
       queues.set(presetId, queue.filter((queuedPlayer) => queuedPlayer.id !== player.id));
     }
+  }
+
+  function sendQueueStatus(): void {
+    for (const player of players.values()) {
+      send(player, { type: "queueStatus", counts: queueCountsFor(player) });
+    }
+  }
+
+  function queueCountsFor(player: Player): Record<PresetId, number> {
+    return {
+      duel: queueCountFor("duel", player),
+      classic: queueCountFor("classic", player),
+      tactical: queueCountFor("tactical", player),
+    };
+  }
+
+  function queueCountFor(presetId: PresetId, player: Player): number {
+    return (queues.get(presetId) ?? []).filter((queuedPlayer) => queuedPlayer.id !== player.id).length;
   }
 
   function broadcast(room: Room, message: ServerMessage): void {
