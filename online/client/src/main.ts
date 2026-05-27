@@ -31,6 +31,7 @@ interface ChatLine {
 type ChatChannel = "match" | "server";
 
 interface StoredSettings {
+  mode?: PlayMode;
   playerName?: string;
   local?: {
     width?: number;
@@ -158,8 +159,10 @@ function closeSettingsPanel(): void {
 }
 
 loadSettings();
+mode = selectedMode();
 applyModeUi();
-startLocalGame();
+if (mode === "network") resetNetworkGame();
+else startLocalGame();
 connect();
 bindControls();
 renderChat();
@@ -170,6 +173,7 @@ function bindControls(): void {
     input.addEventListener("change", () => {
       stopReplay();
       mode = selectedMode();
+      saveSettings();
       applyModeUi();
       if (mode === "network") {
         resetNetworkGame();
@@ -450,6 +454,7 @@ function syncMapOptions(sourceName: string, targetName: string): void {
 
 function loadSettings(): void {
   const settings = readStoredSettings();
+  if (settings.mode) setRadioValue("playMode", settings.mode);
   if (settings.playerName) controls.playerName.value = settings.playerName;
 
   const local = settings.local;
@@ -467,6 +472,7 @@ function loadSettings(): void {
 
 function saveSettings(): void {
   writeStoredSettings({
+    mode,
     playerName: controls.playerName.value.trim(),
     local: {
       width: Number(controls.width.value),
