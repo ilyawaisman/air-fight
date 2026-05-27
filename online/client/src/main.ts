@@ -28,6 +28,8 @@ interface ChatLine {
   fromName?: string;
 }
 
+type ChatChannel = "match" | "server";
+
 interface StoredSettings {
   playerName?: string;
   local?: {
@@ -68,8 +70,9 @@ const controls = {
   chatForms: document.querySelectorAll<HTMLFormElement>(".chat-form"),
   chatInputs: document.querySelectorAll<HTMLInputElement>(".chat-form input"),
   chatSends: document.querySelectorAll<HTMLButtonElement>(".chat-form button"),
+  chatTabs: document.querySelectorAll<HTMLButtonElement>(".chat-tab"),
+  chatCollapse: document.querySelector<HTMLButtonElement>("#collapseChat")!,
   chatToggle: document.querySelector<HTMLButtonElement>("#chatToggle")!,
-  chatClose: document.querySelector<HTMLButtonElement>("#closeChat")!,
   mobileChatClose: document.querySelector<HTMLButtonElement>("#closeMobileChat")!,
   queueCounts: document.querySelectorAll<HTMLElement>(".queue-count"),
   presetButtons: document.querySelectorAll<HTMLButtonElement>(".preset-btn"),
@@ -132,7 +135,10 @@ let queueCounts: Record<PresetId, number> = { duel: 0, classic: 0, tactical: 0 }
 let highlightedMoves: Move[] = [];
 let draggedMove: Move | null = null;
 let history: GameState[] = [];
-let chatLines: ChatLine[] = [];
+let matchChatLines: ChatLine[] = [];
+let serverChatLines: ChatLine[] = [];
+let activeChatChannel: ChatChannel = "match";
+let chatCollapsed = false;
 let replaying = false;
 let replayTimer = 0;
 let replayAnimationFrame = 0;
@@ -213,12 +219,24 @@ function bindControls(): void {
     });
   });
 
-  controls.chatToggle.addEventListener("click", () => {
-    controls.mobileChatPanel.classList.toggle("mobile-open");
+  controls.chatTabs.forEach((button) => {
+    button.addEventListener("click", () => {
+      const channel = button.dataset.chatChannel;
+      if (channel !== "match" && channel !== "server") return;
+      activeChatChannel = channel;
+      renderChat();
+    });
   });
 
-  controls.chatClose.addEventListener("click", () => {
-    controls.mobileChatPanel.classList.remove("mobile-open");
+  controls.chatCollapse.addEventListener("click", () => {
+    chatCollapsed = !chatCollapsed;
+    controls.chatPanel.classList.toggle("collapsed", chatCollapsed);
+    controls.chatCollapse.textContent = chatCollapsed ? "Expand" : "Collapse";
+    controls.chatCollapse.setAttribute("aria-expanded", String(!chatCollapsed));
+  });
+
+  controls.chatToggle.addEventListener("click", () => {
+    controls.mobileChatPanel.classList.toggle("mobile-open");
   });
 
   controls.mobileChatClose.addEventListener("click", () => {
@@ -605,6 +623,11 @@ function handleServerMessage(message: ServerMessage): void {
     return;
   }
 
+  if (message.type === "serverChatMessage") {
+    appendServerChatMessage(message.fromName, message.text);
+    return;
+  }
+
   if (message.type === "gameState") {
     const previous = state ? cloneState(state) : null;
     state = message.state;
@@ -968,14 +991,15 @@ function updateNetworkControls(): void {
     button.disabled = false;
   });
   const connected = socket?.readyState === WebSocket.OPEN;
-  const canChat = mode === "network" && connected && Boolean(gameId);
+  const canChat = mode === "network" && connected;
   controls.chatInputs.forEach((input) => {
-    input.disabled = !canChat;
+    input.disabled = !canChat || (activeChatChannel === "match" && !gameId);
+    input.placeholder = activeChatChannel === "match" ? "Message opponent" : "Message server";
   });
   controls.chatSends.forEach((button) => {
-    button.disabled = !canChat;
+    button.disabled = !canChat || (activeChatChannel === "match" && !gameId);
   });
-  controls.chatToggle.disabled = mode !== "network" || chatLines.length === 0;
+  controls.chatToggle.disabled = mode !== "network" || (matchChatLines.length === 0 && serverChatLines.length === 0);
   renderQueueCounts();
 }
 
@@ -999,30 +1023,45 @@ function renderQueueCounts(): void {
 function sendChatMessage(form: HTMLFormElement): void {
   const input = form.querySelector<HTMLInputElement>("input");
   const text = input?.value.trim() ?? "";
-  if (!text || !gameId) return;
-  send({ type: "chatMessage", gameId, text });
+  if (!text) return;
+  if (activeChatChannel === "match") {
+    if (!gameId) return;
+    send({ type: "chatMessage", gameId, text });
+  } else {
+    send({ type: "serverChatMessage", playerName: controls.playerName.value, text });
+  }
   controls.chatInputs.forEach((chatInput) => {
     chatInput.value = "";
   });
 }
 
 function appendChatMarker(text: string): void {
-  chatLines.push({ kind: "marker", text });
-  trimChatLines();
+  matchChatLines.push({ kind: "marker", text });
+  matchChatLines = trimChatLines(matchChatLines);
   renderChat();
 }
 
 function appendChatMessage(fromTeam: Team, fromName: string, text: string): void {
-  chatLines.push({ kind: "message", fromTeam, fromName, text });
-  trimChatLines();
+  matchChatLines.push({ kind: "message", fromTeam, fromName, text });
+  matchChatLines = trimChatLines(matchChatLines);
   renderChat();
 }
 
-function trimChatLines(): void {
-  chatLines = chatLines.slice(-40);
+function appendServerChatMessage(fromName: string, text: string): void {
+  serverChatLines.push({ kind: "message", fromName, text });
+  serverChatLines = trimChatLines(serverChatLines);
+  renderChat();
+}
+
+function trimChatLines(lines: ChatLine[]): ChatLine[] {
+  return lines.slice(-40);
 }
 
 function renderChat(): void {
+  const chatLines = activeChatChannel === "match" ? matchChatLines : serverChatLines;
+  controls.chatTabs.forEach((button) => {
+    button.classList.toggle("active", button.dataset.chatChannel === activeChatChannel);
+  });
   controls.chatHistories.forEach((historyElement) => {
     historyElement.replaceChildren();
     if (chatLines.length === 0) {
@@ -1037,10 +1076,10 @@ function renderChat(): void {
           element.className = "chat-marker";
           element.textContent = line.text;
         } else {
-          element.className = `chat-line ${line.fromTeam === myTeam ? "mine" : "theirs"}`;
+          element.className = `chat-line ${chatLineClass(line)}`;
           const name = document.createElement("span");
           name.className = "chat-name";
-          name.textContent = line.fromName ?? TEAM[line.fromTeam ?? "red"].name;
+          name.textContent = line.fromName ?? (line.fromTeam ? TEAM[line.fromTeam].name : "Player");
           const message = document.createElement("span");
           message.className = "chat-text";
           message.textContent = line.text;
@@ -1052,6 +1091,15 @@ function renderChat(): void {
     historyElement.scrollTop = historyElement.scrollHeight;
   });
   updateNetworkControls();
+}
+
+function chatLineClass(line: ChatLine): string {
+  if (activeChatChannel === "server") return line.fromName === cleanPlayerName(controls.playerName.value) ? "mine" : "server";
+  return line.fromTeam === myTeam ? "mine" : "theirs";
+}
+
+function cleanPlayerName(value: string): string {
+  return value.trim().slice(0, 24) || "Player";
 }
 
 function replaySpeed(): number {

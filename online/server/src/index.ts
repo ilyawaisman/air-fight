@@ -121,6 +121,14 @@ export function createAirFightServer(): AirFightServer {
         fromName: player.name,
         text,
       });
+      return;
+    }
+
+    if (message.type === "serverChatMessage") {
+      player.name = cleanName(message.playerName);
+      const text = cleanChatText(message.text);
+      if (!text) return;
+      broadcastToPlayers({ type: "serverChatMessage", fromName: player.name, text });
     }
   }
 
@@ -198,6 +206,10 @@ export function createAirFightServer(): AirFightServer {
   function broadcast(room: Room, message: ServerMessage): void {
     send(room.players.red, message);
     send(room.players.blue, message);
+  }
+
+  function broadcastToPlayers(message: ServerMessage): void {
+    for (const player of players.values()) send(player, message);
   }
 
   return {

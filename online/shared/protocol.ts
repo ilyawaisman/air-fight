@@ -4,6 +4,7 @@ export type ClientMessage =
   | { type: "joinQueue"; playerName: string; presetId: PresetId }
   | { type: "submitMove"; gameId: string; move: Pick<Move, "x" | "y"> }
   | { type: "chatMessage"; gameId: string; text: string }
+  | { type: "serverChatMessage"; playerName: string; text: string }
   | { type: "leaveQueue" };
 
 export type ServerMessage =
@@ -13,5 +14,6 @@ export type ServerMessage =
   | { type: "matchFound"; gameId: string; team: Team; opponentName: string; state: GameState }
   | { type: "gameState"; state: GameState; eliminated: string[] }
   | { type: "chatMessage"; gameId: string; fromTeam: Team; fromName: string; text: string }
+  | { type: "serverChatMessage"; fromName: string; text: string }
   | { type: "moveRejected"; reason: string; state: GameState }
   | { type: "opponentDisconnected"; state?: GameState };

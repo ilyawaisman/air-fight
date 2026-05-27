@@ -163,6 +163,23 @@ describe("websocket protocol", () => {
     });
   });
 
+  it("broadcasts server chat to all connected players", async () => {
+    const [red, blue] = await connectClients();
+
+    red.send({ type: "serverChatMessage", playerName: "Ada", text: "  hello   everyone  " });
+
+    expect(await red.next("serverChatMessage")).toMatchObject({
+      type: "serverChatMessage",
+      fromName: "Ada",
+      text: "hello everyone",
+    });
+    expect(await blue.next("serverChatMessage")).toMatchObject({
+      type: "serverChatMessage",
+      fromName: "Ada",
+      text: "hello everyone",
+    });
+  });
+
   it("lets a player leave an active match", async () => {
     const [red, blue] = await connectClients();
 
