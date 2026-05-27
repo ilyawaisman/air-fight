@@ -21,6 +21,13 @@ interface LaserEffect {
   born: number;
 }
 
+interface ChatLine {
+  kind: "message" | "marker";
+  text: string;
+  fromTeam?: Team;
+  fromName?: string;
+}
+
 const HIT_RADIUS = 1;
 const TURRET_RADIUS = 5;
 
@@ -41,7 +48,15 @@ const controls = {
   newGame: document.querySelectorAll<HTMLButtonElement>(".new-game-btn"),
   replay: document.querySelectorAll<HTMLButtonElement>(".replay-btn"),
   speed: document.querySelectorAll<HTMLButtonElement>(".speed-btn"),
-  leaveQueue: document.querySelector<HTMLButtonElement>("#leaveQueue")!,
+  chatPanel: document.querySelector<HTMLElement>("#chatPanel")!,
+  mobileChatPanel: document.querySelector<HTMLElement>("#mobileChatPanel")!,
+  chatHistories: document.querySelectorAll<HTMLElement>(".chat-history"),
+  chatForms: document.querySelectorAll<HTMLFormElement>(".chat-form"),
+  chatInputs: document.querySelectorAll<HTMLInputElement>(".chat-form input"),
+  chatSends: document.querySelectorAll<HTMLButtonElement>(".chat-form button"),
+  chatToggle: document.querySelector<HTMLButtonElement>("#chatToggle")!,
+  chatClose: document.querySelector<HTMLButtonElement>("#closeChat")!,
+  mobileChatClose: document.querySelector<HTMLButtonElement>("#closeMobileChat")!,
   presetButtons: document.querySelectorAll<HTMLButtonElement>(".preset-btn"),
   networkOnly: document.querySelectorAll<HTMLElement>(".network-only"),
   localOnly: document.querySelectorAll<HTMLElement>(".local-only"),
@@ -97,9 +112,11 @@ let reconnectTimer = 0;
 let aiTimer = 0;
 let gameId: string | null = null;
 let myTeam: Team | null = null;
+let queueing = false;
 let highlightedMoves: Move[] = [];
 let draggedMove: Move | null = null;
 let history: GameState[] = [];
+let chatLines: ChatLine[] = [];
 let replaying = false;
 let replayTimer = 0;
 let replayAnimationFrame = 0;
@@ -117,6 +134,7 @@ applyModeUi();
 startLocalGame();
 connect();
 bindControls();
+renderChat();
 draw();
 
 function bindControls(): void {
@@ -156,11 +174,23 @@ function bindControls(): void {
     });
   });
 
-  controls.leaveQueue.addEventListener("click", () => {
-    stopReplay();
-    send({ type: "leaveQueue" });
-    controls.leaveQueue.disabled = true;
-    labels.message.textContent = "Queue left.";
+  controls.chatForms.forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      sendChatMessage(form);
+    });
+  });
+
+  controls.chatToggle.addEventListener("click", () => {
+    controls.mobileChatPanel.classList.toggle("mobile-open");
+  });
+
+  controls.chatClose.addEventListener("click", () => {
+    controls.mobileChatPanel.classList.remove("mobile-open");
+  });
+
+  controls.mobileChatClose.addEventListener("click", () => {
+    controls.mobileChatPanel.classList.remove("mobile-open");
   });
 
   canvas.addEventListener("click", (event) => {
@@ -249,8 +279,12 @@ function bindControls(): void {
 
 function newGameAction(): void {
   stopReplay();
-  if (mode === "network") joinQueue();
-  else startLocalGame();
+  if (mode === "network") {
+    if (queueing) leaveQueue();
+    else joinQueue();
+    return;
+  }
+  startLocalGame();
 }
 
 function selectedMode(): PlayMode {
@@ -267,9 +301,9 @@ function applyModeUi(): void {
     element.classList.toggle("is-hidden", mode === "network");
   });
   controls.newGame.forEach((button) => {
-    button.textContent = mode === "network" ? "Queue" : "New";
+    button.textContent = mode === "network" ? (queueing ? "Leave Queue" : "Queue") : "New";
   });
-  controls.leaveQueue.disabled = true;
+  updateNetworkControls();
   updateReplayControls();
 }
 
@@ -314,6 +348,7 @@ function startLocalGame(): void {
   clearEffects();
   gameId = null;
   myTeam = null;
+  queueing = false;
   const previousState = state;
   const preset = localPresetFromControls();
   selectedPreset = preset.id;
@@ -329,6 +364,7 @@ function startLocalGame(): void {
   updateHighlights();
   updateStatus();
   updateReplayControls();
+  updateNetworkControls();
   draw();
 }
 
@@ -365,9 +401,11 @@ function resetNetworkGame(): void {
   state = null;
   highlightedMoves = [];
   history = [];
+  queueing = false;
   hideEndGameUI();
   updateStatus();
   updateReplayControls();
+  updateNetworkControls();
   draw();
 }
 
@@ -375,9 +413,19 @@ function joinQueue(): void {
   resetNetworkGame();
   selectedPreset = networkPresetFromControls();
   syncPresetControls(selectedPreset);
+  queueing = true;
+  appendChatMarker(`New ${GAME_PRESETS[selectedPreset].label} queue`);
   send({ type: "joinQueue", playerName: controls.playerName.value, presetId: selectedPreset });
-  controls.leaveQueue.disabled = false;
   labels.message.textContent = `Queueing for ${GAME_PRESETS[selectedPreset].label}.`;
+  updateNetworkControls();
+}
+
+function leaveQueue(): void {
+  if (!queueing) return;
+  send({ type: "leaveQueue" });
+  queueing = false;
+  labels.message.textContent = "Queue left.";
+  updateNetworkControls();
 }
 
 function networkPresetFromControls(): PresetId {
@@ -392,6 +440,7 @@ function connect(): void {
 
   socket.addEventListener("open", () => {
     if (mode === "network") labels.message.textContent = "Connected. Choose Queue to play online.";
+    updateNetworkControls();
   });
 
   socket.addEventListener("message", (event) => {
@@ -400,7 +449,8 @@ function connect(): void {
 
   socket.addEventListener("close", () => {
     if (mode === "network") labels.message.textContent = "Disconnected. Reconnecting...";
-    controls.leaveQueue.disabled = true;
+    queueing = false;
+    updateNetworkControls();
     window.clearTimeout(reconnectTimer);
     reconnectTimer = window.setTimeout(connect, 1200);
   });
@@ -409,7 +459,9 @@ function connect(): void {
 function handleServerMessage(message: ServerMessage): void {
   if (mode !== "network") return;
   if (message.type === "queued") {
+    queueing = true;
     labels.message.textContent = `Queued for ${GAME_PRESETS[message.presetId].label}.`;
+    updateNetworkControls();
     return;
   }
 
@@ -419,7 +471,8 @@ function handleServerMessage(message: ServerMessage): void {
     history = [cloneState(state)];
     gameId = message.gameId;
     myTeam = message.team;
-    controls.leaveQueue.disabled = true;
+    queueing = false;
+    appendChatMarker(`New match vs ${message.opponentName}`);
     labels.message.textContent = state.turn === myTeam
       ? `Matched as ${TEAM[message.team].name} vs ${message.opponentName}. Your turn.`
       : `Matched as ${TEAM[message.team].name} vs ${message.opponentName}. Waiting for opponent move.`;
@@ -427,7 +480,14 @@ function handleServerMessage(message: ServerMessage): void {
     updateHighlights();
     updateStatus();
     updateReplayControls();
+    updateNetworkControls();
     draw();
+    return;
+  }
+
+  if (message.type === "chatMessage") {
+    if (message.gameId !== gameId) return;
+    appendChatMessage(message.fromTeam, message.fromName, message.text);
     return;
   }
 
@@ -451,10 +511,13 @@ function handleServerMessage(message: ServerMessage): void {
 
   if (message.type === "opponentDisconnected") {
     if (message.state) state = message.state;
+    gameId = null;
+    myTeam = null;
     labels.message.textContent = "The opponent disconnected. Queue again when ready.";
-    controls.leaveQueue.disabled = true;
+    queueing = false;
     updateHighlights();
     updateStatus();
+    updateNetworkControls();
     draw();
   }
 }
@@ -501,6 +564,7 @@ function updateAfterStateChange(eliminated: string[]): void {
   updateHighlights();
   updateStatus();
   updateReplayControls();
+  updateNetworkControls();
   draw();
 }
 
@@ -646,10 +710,12 @@ function updateStatus(): void {
     labels.blueAlive.textContent = "0";
     labels.mobileRedStats.textContent = "Red: 0";
     labels.mobileBlueStats.textContent = "Blue: 0";
+    updateActiveHud(null);
     return;
   }
 
   const token = activeToken(state);
+  updateActiveHud(token);
   labels.turn.textContent = state.gameOver
     ? "Game over"
     : waitingForNetworkOpponent
@@ -663,11 +729,20 @@ function updateStatus(): void {
   labels.mobileBlueStats.textContent = `Blue: ${aliveSummaryCompact("blue")}`;
 }
 
+function updateActiveHud(token: Token | null): void {
+  const row = labels.moving.parentElement;
+  if (!row) return;
+  row.classList.remove("active-hud", "active-red", "active-blue");
+  if (!token || state?.gameOver) return;
+  row.classList.add("active-hud", token.team === "red" ? "active-red" : "active-blue");
+}
+
 function startReplay(): void {
   if (history.length < 2) return;
   replaying = true;
   window.clearTimeout(aiTimer);
   clearEffects();
+  hideEndGameUI();
   let index = 0;
   controls.replay.forEach((button) => {
     button.textContent = "Stop";
@@ -709,6 +784,7 @@ function stopReplay(): void {
   updateStatus();
   updateReplayControls();
   draw();
+  if (state?.gameOver) showPersistentBannerOnly();
   scheduleComputerMove();
 }
 
@@ -770,6 +846,80 @@ function updateReplayControls(): void {
   controls.speed.forEach((button) => {
     button.textContent = `${replaySpeed()}x`;
   });
+}
+
+function updateNetworkControls(): void {
+  controls.newGame.forEach((button) => {
+    button.textContent = mode === "network" ? (queueing ? "Leave Queue" : "Queue") : "New";
+    button.disabled = mode === "network" && Boolean(gameId && state && !state.gameOver);
+  });
+  const connected = socket?.readyState === WebSocket.OPEN;
+  const canChat = mode === "network" && connected && Boolean(gameId);
+  controls.chatInputs.forEach((input) => {
+    input.disabled = !canChat;
+  });
+  controls.chatSends.forEach((button) => {
+    button.disabled = !canChat;
+  });
+  controls.chatToggle.disabled = mode !== "network" || chatLines.length === 0;
+}
+
+function sendChatMessage(form: HTMLFormElement): void {
+  const input = form.querySelector<HTMLInputElement>("input");
+  const text = input?.value.trim() ?? "";
+  if (!text || !gameId) return;
+  send({ type: "chatMessage", gameId, text });
+  controls.chatInputs.forEach((chatInput) => {
+    chatInput.value = "";
+  });
+}
+
+function appendChatMarker(text: string): void {
+  chatLines.push({ kind: "marker", text });
+  trimChatLines();
+  renderChat();
+}
+
+function appendChatMessage(fromTeam: Team, fromName: string, text: string): void {
+  chatLines.push({ kind: "message", fromTeam, fromName, text });
+  trimChatLines();
+  renderChat();
+}
+
+function trimChatLines(): void {
+  chatLines = chatLines.slice(-40);
+}
+
+function renderChat(): void {
+  controls.chatHistories.forEach((historyElement) => {
+    historyElement.replaceChildren();
+    if (chatLines.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "chat-empty";
+      empty.textContent = "No messages yet.";
+      historyElement.appendChild(empty);
+    } else {
+      for (const line of chatLines) {
+        const element = document.createElement("div");
+        if (line.kind === "marker") {
+          element.className = "chat-marker";
+          element.textContent = line.text;
+        } else {
+          element.className = `chat-line ${line.fromTeam === myTeam ? "mine" : "theirs"}`;
+          const name = document.createElement("span");
+          name.className = "chat-name";
+          name.textContent = line.fromName ?? TEAM[line.fromTeam ?? "red"].name;
+          const message = document.createElement("span");
+          message.className = "chat-text";
+          message.textContent = line.text;
+          element.append(name, message);
+        }
+        historyElement.appendChild(element);
+      }
+    }
+    historyElement.scrollTop = historyElement.scrollHeight;
+  });
+  updateNetworkControls();
 }
 
 function replaySpeed(): number {

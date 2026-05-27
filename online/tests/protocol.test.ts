@@ -121,4 +121,31 @@ describe("websocket protocol", () => {
     expect(redState.state.moveNumber).toBe(1);
     expect(blueState.state).toEqual(redState.state);
   });
+
+  it("broadcasts chat messages to both players in a match", async () => {
+    const [red, blue] = await connectClients();
+
+    red.send({ type: "joinQueue", playerName: "Red", presetId: "duel" });
+    await red.next("queued");
+    blue.send({ type: "joinQueue", playerName: "Blue", presetId: "duel" });
+    const redMatch = await red.next("matchFound");
+    const blueMatch = await blue.next("matchFound");
+    if (redMatch.type !== "matchFound" || blueMatch.type !== "matchFound") throw new Error("Expected match messages");
+
+    red.send({ type: "chatMessage", gameId: redMatch.gameId, text: "  hello   pilot  " });
+    expect(await red.next("chatMessage")).toMatchObject({
+      type: "chatMessage",
+      gameId: redMatch.gameId,
+      fromTeam: "red",
+      fromName: "Red",
+      text: "hello pilot",
+    });
+    expect(await blue.next("chatMessage")).toMatchObject({
+      type: "chatMessage",
+      gameId: blueMatch.gameId,
+      fromTeam: "red",
+      fromName: "Red",
+      text: "hello pilot",
+    });
+  });
 });

@@ -97,6 +97,21 @@ export function createAirFightServer(): AirFightServer {
         return;
       }
       broadcast(room, { type: "gameState", state: room.state, eliminated: result.eliminated });
+      return;
+    }
+
+    if (message.type === "chatMessage") {
+      const room = player.gameId ? rooms.get(player.gameId) : null;
+      if (!room || room.id !== message.gameId || !player.team) return;
+      const text = cleanChatText(message.text);
+      if (!text) return;
+      broadcast(room, {
+        type: "chatMessage",
+        gameId: room.id,
+        fromTeam: player.team,
+        fromName: player.name,
+        text,
+      });
     }
   }
 
@@ -183,6 +198,11 @@ function parseClientMessage(raw: string): ClientMessage | null {
 function cleanName(value: string): string {
   const trimmed = value.trim().slice(0, 24);
   return trimmed || "Player";
+}
+
+function cleanChatText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, " ").slice(0, 180);
 }
 
 function closeServer(server: http.Server, wss: WebSocketServer): Promise<void> {
