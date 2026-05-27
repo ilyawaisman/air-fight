@@ -435,7 +435,7 @@ function networkPresetFromControls(): PresetId {
 
 function connect(): void {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = import.meta.env.VITE_WS_HOST ?? `${window.location.hostname}:3000`;
+  const host = import.meta.env.VITE_WS_HOST ?? defaultWebSocketHost();
   socket = new WebSocket(`${protocol}//${host}/ws`);
 
   socket.addEventListener("open", () => {
@@ -454,6 +454,11 @@ function connect(): void {
     window.clearTimeout(reconnectTimer);
     reconnectTimer = window.setTimeout(connect, 1200);
   });
+}
+
+function defaultWebSocketHost(): string {
+  if (window.location.port === "5173") return `${window.location.hostname}:3000`;
+  return window.location.host;
 }
 
 function handleServerMessage(message: ServerMessage): void {

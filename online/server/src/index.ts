@@ -1,4 +1,7 @@
 import http from "node:http";
+import { createReadStream, existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -23,6 +26,8 @@ interface Room {
 }
 
 const PORT = Number(process.env.PORT ?? 3000);
+const HOST = process.env.HOST ?? "0.0.0.0";
+const CLIENT_DIST = path.resolve(process.cwd(), "dist/client");
 
 export interface AirFightServer {
   server: http.Server;
@@ -42,8 +47,7 @@ export function createAirFightServer(): AirFightServer {
       return;
     }
 
-    res.writeHead(200, { "content-type": "text/plain" });
-    res.end("Air Fight Online server\n");
+    void serveStaticClient(req, res);
   });
 
   const wss = new WebSocketServer({ server, path: "/ws" });
@@ -225,7 +229,70 @@ function closeServer(server: http.Server, wss: WebSocketServer): Promise<void> {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const { server } = createAirFightServer();
-  server.listen(PORT, () => {
-    console.log(`Air Fight Online server listening on http://localhost:${PORT}`);
+  server.listen(PORT, HOST, () => {
+    console.log(`Air Fight Online server listening on http://${HOST}:${PORT}`);
   });
+}
+
+async function serveStaticClient(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!existsSync(CLIENT_DIST)) {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("Air Fight Online server\n");
+    return;
+  }
+
+  const pathname = safePathname(req.url);
+  const requestedPath = pathname === "/" ? "/index.html" : pathname;
+  const filePath = path.join(CLIENT_DIST, requestedPath);
+  const indexPath = path.join(CLIENT_DIST, "index.html");
+  const resolvedPath = await readableFilePath(filePath) ?? indexPath;
+
+  if (!isInsideClientDist(resolvedPath)) {
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("Not found\n");
+    return;
+  }
+
+  createReadStream(resolvedPath)
+    .on("error", () => {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end("Server error\n");
+    })
+    .pipe(res.writeHead(200, { "content-type": contentType(resolvedPath) }));
+}
+
+async function readableFilePath(filePath: string): Promise<string | null> {
+  try {
+    const resolved = path.resolve(filePath);
+    if (!isInsideClientDist(resolved)) return null;
+    const info = await stat(resolved);
+    return info.isFile() ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+function isInsideClientDist(filePath: string): boolean {
+  const relative = path.relative(CLIENT_DIST, filePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function safePathname(url: string | undefined): string {
+  try {
+    return decodeURIComponent(new URL(url ?? "/", "http://localhost").pathname);
+  } catch {
+    return "/";
+  }
+}
+
+function contentType(filePath: string): string {
+  const ext = path.extname(filePath);
+  if (ext === ".html") return "text/html; charset=utf-8";
+  if (ext === ".js") return "text/javascript; charset=utf-8";
+  if (ext === ".css") return "text/css; charset=utf-8";
+  if (ext === ".svg") return "image/svg+xml";
+  if (ext === ".json") return "application/json; charset=utf-8";
+  if (ext === ".png") return "image/png";
+  if (ext === ".ico") return "image/x-icon";
+  return "application/octet-stream";
 }

@@ -21,3 +21,23 @@ npm run typecheck
 ```
 
 The shared engine is intentionally pure TypeScript so rules can be unit-tested without a browser or server.
+
+## Production
+
+```sh
+npm run build
+npm start
+```
+
+The production server listens on `PORT` (`3000` by default), serves the built client from `dist/client`, and exposes the WebSocket endpoint at `/ws`.
+
+## Fly.io
+
+This project is prepared for a single-machine Fly.io deploy:
+
+```sh
+fly launch --no-deploy
+fly deploy
+```
+
+Before the first deploy, make sure the app name in `fly.toml` is available or let `fly launch` rewrite it. Keep one Machine for now because queues and active rooms are stored in memory.
