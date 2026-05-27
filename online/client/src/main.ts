@@ -28,8 +28,22 @@ interface ChatLine {
   fromName?: string;
 }
 
+interface StoredSettings {
+  playerName?: string;
+  local?: {
+    width?: number;
+    height?: number;
+    planes?: number;
+    turrets?: number;
+    obstacles?: ObstacleType;
+    showTurretZones?: boolean;
+    mapOption?: "new" | "keep" | "swap";
+  };
+}
+
 const HIT_RADIUS = 1;
 const TURRET_RADIUS = 5;
+const SETTINGS_KEY = "air-fight-online-settings";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#board")!;
 const ctx = canvas.getContext("2d")!;
@@ -137,6 +151,7 @@ function closeSettingsPanel(): void {
   document.querySelector<HTMLElement>("#settingsBackdrop")?.classList.remove("active");
 }
 
+loadSettings();
 applyModeUi();
 startLocalGame();
 connect();
@@ -164,16 +179,26 @@ function bindControls(): void {
       if (button.dataset.w) controls.width.value = button.dataset.w;
       if (button.dataset.h) controls.height.value = button.dataset.h;
       selectedPreset = presetFromControls();
+      saveSettings();
     });
   });
 
   controls.planes.addEventListener("change", () => {
     selectedPreset = presetFromControls();
+    saveSettings();
   });
   controls.turrets.addEventListener("change", () => {
     selectedPreset = presetFromControls();
+    saveSettings();
   });
-  controls.showTurretZones.addEventListener("change", draw);
+  controls.width.addEventListener("change", saveSettings);
+  controls.height.addEventListener("change", saveSettings);
+  controls.obstacles.addEventListener("change", saveSettings);
+  controls.showTurretZones.addEventListener("change", () => {
+    saveSettings();
+    draw();
+  });
+  controls.playerName.addEventListener("input", saveSettings);
 
   controls.newGame.forEach((button) => {
     button.addEventListener("click", () => {
@@ -271,10 +296,16 @@ function bindControls(): void {
   backdrop?.addEventListener("click", closeSettingsPanel);
 
   document.getElementsByName("mapOption").forEach((input) => {
-    input.addEventListener("change", () => syncMapOptions("mapOption", "mapOptionMobile"));
+    input.addEventListener("change", () => {
+      syncMapOptions("mapOption", "mapOptionMobile");
+      saveSettings();
+    });
   });
   document.getElementsByName("mapOptionMobile").forEach((input) => {
-    input.addEventListener("change", () => syncMapOptions("mapOptionMobile", "mapOption"));
+    input.addEventListener("change", () => {
+      syncMapOptions("mapOptionMobile", "mapOption");
+      saveSettings();
+    });
   });
 
   bindTouchControls();
@@ -361,6 +392,7 @@ function startLocalGame(): void {
   controls.height.value = String(preset.height);
   controls.planes.value = String(preset.planes);
   controls.turrets.value = String(preset.turrets);
+  saveSettings();
   state = createGameFromPreset(`local-${Date.now()}`, preset, Math.floor(Math.random() * 0xffffffff));
   applyRestartMapOption(previousState, state);
   history = [cloneState(state)];
@@ -396,6 +428,65 @@ function syncMapOptions(sourceName: string, targetName: string): void {
   if (!value) return;
   const match = Array.from(target).find((input) => input.value === value);
   if (match) match.checked = true;
+}
+
+function loadSettings(): void {
+  const settings = readStoredSettings();
+  if (settings.playerName) controls.playerName.value = settings.playerName;
+
+  const local = settings.local;
+  if (!local) return;
+  if (typeof local.width === "number") controls.width.value = String(clamp(local.width, 12, 80));
+  if (typeof local.height === "number") controls.height.value = String(clamp(local.height, 16, 96));
+  if (typeof local.planes === "number") controls.planes.value = String(clamp(local.planes, 1, 7));
+  if (typeof local.turrets === "number") controls.turrets.value = String(clamp(local.turrets, 0, 2));
+  if (local.obstacles) controls.obstacles.value = local.obstacles;
+  if (typeof local.showTurretZones === "boolean") controls.showTurretZones.checked = local.showTurretZones;
+  if (local.mapOption) setRadioValue("mapOption", local.mapOption);
+  syncMapOptions("mapOption", "mapOptionMobile");
+  selectedPreset = presetFromControls();
+}
+
+function saveSettings(): void {
+  writeStoredSettings({
+    playerName: controls.playerName.value.trim(),
+    local: {
+      width: Number(controls.width.value),
+      height: Number(controls.height.value),
+      planes: Number(controls.planes.value),
+      turrets: Number(controls.turrets.value),
+      obstacles: obstacleTypeFromControls(),
+      showTurretZones: controls.showTurretZones.checked,
+      mapOption: mapOptionFromControls(),
+    },
+  });
+}
+
+function readStoredSettings(): StoredSettings {
+  try {
+    return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}") as StoredSettings;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredSettings(settings: StoredSettings): void {
+  try {
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore storage failures; gameplay should not depend on persistence.
+  }
+}
+
+function mapOptionFromControls(): "new" | "keep" | "swap" {
+  const value = Array.from(controls.mapOption).find((input) => input.checked)?.value;
+  return value === "keep" || value === "swap" ? value : "new";
+}
+
+function setRadioValue(name: string, value: string): void {
+  const input = Array.from(document.getElementsByName(name) as NodeListOf<HTMLInputElement>)
+    .find((candidate) => candidate.value === value);
+  if (input) input.checked = true;
 }
 
 function resetNetworkGame(): void {
