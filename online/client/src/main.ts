@@ -130,6 +130,11 @@ let isSwiping = false;
 let longTouchTimer = 0;
 let longTouchActive = false;
 
+function closeSettingsPanel(): void {
+  document.querySelector<HTMLElement>(".control-panel")?.classList.remove("open");
+  document.querySelector<HTMLElement>("#settingsBackdrop")?.classList.remove("active");
+}
+
 applyModeUi();
 startLocalGame();
 connect();
@@ -256,16 +261,12 @@ function bindControls(): void {
   const closeSettings = document.querySelector<HTMLButtonElement>("#closeSettings");
   const backdrop = document.querySelector<HTMLElement>("#settingsBackdrop");
   const panel = document.querySelector<HTMLElement>(".control-panel");
-  const closePanel = () => {
-    panel?.classList.remove("open");
-    backdrop?.classList.remove("active");
-  };
   toggleSettings?.addEventListener("click", () => {
     panel?.classList.add("open");
     backdrop?.classList.add("active");
   });
-  closeSettings?.addEventListener("click", closePanel);
-  backdrop?.addEventListener("click", closePanel);
+  closeSettings?.addEventListener("click", closeSettingsPanel);
+  backdrop?.addEventListener("click", closeSettingsPanel);
 
   document.getElementsByName("mapOption").forEach((input) => {
     input.addEventListener("change", () => syncMapOptions("mapOption", "mapOptionMobile"));
@@ -279,8 +280,10 @@ function bindControls(): void {
 
 function newGameAction(): void {
   stopReplay();
+  closeSettingsPanel();
   if (mode === "network") {
-    if (queueing) leaveQueue();
+    if (gameId && state && !state.gameOver) leaveNetworkGame();
+    else if (queueing) leaveQueue();
     else joinQueue();
     return;
   }
@@ -301,7 +304,7 @@ function applyModeUi(): void {
     element.classList.toggle("is-hidden", mode === "network");
   });
   controls.newGame.forEach((button) => {
-    button.textContent = mode === "network" ? (queueing ? "Leave Queue" : "Queue") : "New";
+    button.textContent = networkActionLabel();
   });
   updateNetworkControls();
   updateReplayControls();
@@ -428,6 +431,13 @@ function leaveQueue(): void {
   updateNetworkControls();
 }
 
+function leaveNetworkGame(): void {
+  if (!gameId) return;
+  send({ type: "leaveQueue" });
+  resetNetworkGame();
+  labels.message.textContent = "Game left. Queue again when ready.";
+}
+
 function networkPresetFromControls(): PresetId {
   const value = Array.from(controls.networkPreset).find((input) => input.checked)?.value;
   return value && isPresetId(value) ? value : "duel";
@@ -480,7 +490,7 @@ function handleServerMessage(message: ServerMessage): void {
     appendChatMarker(`New match vs ${message.opponentName}`);
     labels.message.textContent = state.turn === myTeam
       ? `Matched as ${TEAM[message.team].name} vs ${message.opponentName}. Your turn.`
-      : `Matched as ${TEAM[message.team].name} vs ${message.opponentName}. Waiting for opponent move.`;
+      : `Matched as ${TEAM[message.team].name} vs ${message.opponentName}. Opponent move.`;
     hideEndGameUI();
     updateHighlights();
     updateStatus();
@@ -562,7 +572,7 @@ function updateAfterStateChange(eliminated: string[]): void {
   } else if (mode === "network") {
     labels.message.textContent = state.turn === myTeam
       ? "Your turn."
-      : "Waiting for opponent move.";
+      : "Opponent move.";
   } else {
     labels.message.textContent = `${TEAM[state.turn].name} to move.`;
   }
@@ -855,8 +865,8 @@ function updateReplayControls(): void {
 
 function updateNetworkControls(): void {
   controls.newGame.forEach((button) => {
-    button.textContent = mode === "network" ? (queueing ? "Leave Queue" : "Queue") : "New";
-    button.disabled = mode === "network" && Boolean(gameId && state && !state.gameOver);
+    button.textContent = networkActionLabel();
+    button.disabled = false;
   });
   const connected = socket?.readyState === WebSocket.OPEN;
   const canChat = mode === "network" && connected && Boolean(gameId);
@@ -867,6 +877,13 @@ function updateNetworkControls(): void {
     button.disabled = !canChat;
   });
   controls.chatToggle.disabled = mode !== "network" || chatLines.length === 0;
+}
+
+function networkActionLabel(): string {
+  if (mode !== "network") return "New";
+  if (gameId && state && !state.gameOver) return "Leave Game";
+  if (queueing) return "Leave Queue";
+  return "Queue";
 }
 
 function sendChatMessage(form: HTMLFormElement): void {
@@ -1183,9 +1200,11 @@ function drawHighlights(geo: ReturnType<typeof boardGeometry>): void {
 
 function drawTokens(geo: ReturnType<typeof boardGeometry>): void {
   if (!state) return;
+  const active = activeToken(state);
   for (const token of state.tokens) {
     if (!token.alive) continue;
     const p = gridToPixel(token, geo);
+    if (active?.id === token.id && !replaying) drawActiveMarker(p, token, geo);
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.fillStyle = TEAM[token.team].color;
@@ -1222,6 +1241,38 @@ function drawTokens(geo: ReturnType<typeof boardGeometry>): void {
     }
     ctx.restore();
   }
+}
+
+function drawActiveMarker(p: { x: number; y: number }, token: Token, geo: ReturnType<typeof boardGeometry>): void {
+  const size = token.type === "plane"
+    ? Math.max(10 * geo.dpr, geo.cell * 0.52)
+    : Math.max(9 * geo.dpr, geo.cell * 0.45);
+  const radius = size * 1.1;
+  const length = size * 0.35;
+
+  ctx.save();
+  ctx.strokeStyle = TEAM[token.team].color;
+  ctx.fillStyle = TEAM[token.team].color;
+  ctx.lineWidth = 1.8 * geo.dpr;
+
+  drawMarkerBracket(p.x - radius, p.y - radius, length, 1, 1);
+  drawMarkerBracket(p.x + radius, p.y - radius, length, -1, 1);
+  drawMarkerBracket(p.x - radius, p.y + radius, length, 1, -1);
+  drawMarkerBracket(p.x + radius, p.y + radius, length, -1, -1);
+
+  ctx.globalAlpha = 0.08;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius * 0.85, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMarkerBracket(x: number, y: number, length: number, xDirection: -1 | 1, yDirection: -1 | 1): void {
+  ctx.beginPath();
+  ctx.moveTo(x, y + length * yDirection);
+  ctx.lineTo(x, y);
+  ctx.lineTo(x + length * xDirection, y);
+  ctx.stroke();
 }
 
 function drawExplosions(geo: ReturnType<typeof boardGeometry>): void {
@@ -1401,10 +1452,7 @@ function bindTouchControls(): void {
     if (!state.gameOver) {
       longTouchTimer = window.setTimeout(() => {
         if (!isSwiping || !state || !canMoveNow()) return;
-        const token = activeToken(state);
-        if (!token) return;
-        const anchor = token.type === "plane" ? { x: token.x + token.vx, y: token.y + token.vy } : token;
-        const keepSpeedMove = highlightedMoves.find((move) => move.x === anchor.x && move.y === anchor.y);
+        const keepSpeedMove = keepSpeedMoveForActiveToken();
         if (!keepSpeedMove) return;
         longTouchActive = true;
         navigator.vibrate?.(40);
@@ -1495,6 +1543,14 @@ function bindTouchControls(): void {
     swipeOverlay?.classList.remove("visible");
     draw();
   });
+}
+
+function keepSpeedMoveForActiveToken(): Move | null {
+  if (!state) return null;
+  const token = activeToken(state);
+  if (!token) return null;
+  const anchor = token.type === "plane" ? { x: token.x + token.vx, y: token.y + token.vy } : token;
+  return legalMoves(state, token).find((move) => move.x === anchor.x && move.y === anchor.y) ?? null;
 }
 
 function canTouchMove(): boolean {

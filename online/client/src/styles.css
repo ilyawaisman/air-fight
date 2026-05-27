@@ -380,7 +380,7 @@ button:disabled {
 }
 
 .board-container.waiting-network::after {
-  content: "Waiting for opponent move";
+  content: "Opponent move";
   position: absolute;
   top: 18px;
   left: 50%;

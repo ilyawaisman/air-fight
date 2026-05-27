@@ -88,6 +88,7 @@ export function createAirFightServer(): AirFightServer {
 
     if (message.type === "leaveQueue") {
       removeFromQueues(player);
+      leaveRoom(player);
       return;
     }
 

@@ -148,4 +148,17 @@ describe("websocket protocol", () => {
       text: "hello pilot",
     });
   });
+
+  it("lets a player leave an active match", async () => {
+    const [red, blue] = await connectClients();
+
+    red.send({ type: "joinQueue", playerName: "Red", presetId: "duel" });
+    await red.next("queued");
+    blue.send({ type: "joinQueue", playerName: "Blue", presetId: "duel" });
+    await red.next("matchFound");
+    await blue.next("matchFound");
+
+    red.send({ type: "leaveQueue" });
+    expect(await blue.next("opponentDisconnected")).toMatchObject({ type: "opponentDisconnected" });
+  });
 });
