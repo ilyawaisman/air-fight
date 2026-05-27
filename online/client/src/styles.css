@@ -399,7 +399,7 @@ button:disabled {
 }
 
 .board-container.waiting-network::after {
-  content: "Opponent move";
+  content: attr(data-waiting-label);
   position: absolute;
   top: 18px;
   left: 50%;

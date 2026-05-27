@@ -131,6 +131,7 @@ let reconnectTimer = 0;
 let aiTimer = 0;
 let gameId: string | null = null;
 let myTeam: Team | null = null;
+let playerNames: Record<Team, string> = { red: "Red", blue: "Blue" };
 let queueing = false;
 let queueCounts: Record<PresetId, number> = { duel: 0, classic: 0, tactical: 0 };
 let highlightedMoves: Move[] = [];
@@ -406,6 +407,7 @@ function startLocalGame(): void {
   clearEffects();
   gameId = null;
   myTeam = null;
+  playerNames = { red: "Red", blue: "Blue" };
   queueing = false;
   const previousState = state;
   const preset = localPresetFromControls();
@@ -518,6 +520,7 @@ function resetNetworkGame(): void {
   clearEffects();
   gameId = null;
   myTeam = null;
+  playerNames = { red: "Red", blue: "Blue" };
   state = null;
   highlightedMoves = [];
   history = [];
@@ -553,6 +556,34 @@ function leaveNetworkGame(): void {
   send({ type: "leaveQueue" });
   resetNetworkGame();
   labels.message.textContent = "Game left. Queue again when ready.";
+}
+
+function opponentTeam(team: Team): Team {
+  return team === "red" ? "blue" : "red";
+}
+
+function playerNameFor(team: Team): string {
+  if (mode !== "network") return TEAM[team].name;
+  return playerNames[team] || TEAM[team].name;
+}
+
+function coloredPlayerName(team: Team): { text: string; color: string } {
+  return { text: playerNameFor(team), color: TEAM[team].color };
+}
+
+function setMessage(...parts: Array<string | { text: string; color: string }>): void {
+  labels.message.replaceChildren();
+  for (const part of parts) {
+    if (typeof part === "string") {
+      labels.message.append(document.createTextNode(part));
+      continue;
+    }
+    const span = document.createElement("span");
+    span.textContent = part.text;
+    span.style.color = part.color;
+    span.style.fontWeight = "800";
+    labels.message.append(span);
+  }
 }
 
 function networkPresetFromControls(): PresetId {
@@ -609,11 +640,14 @@ function handleServerMessage(message: ServerMessage): void {
     history = [cloneState(state)];
     gameId = message.gameId;
     myTeam = message.team;
+    playerNames = {
+      ...playerNames,
+      [message.team]: cleanPlayerName(controls.playerName.value),
+      [opponentTeam(message.team)]: message.opponentName,
+    };
     queueing = false;
     appendChatMarker(`New match vs ${message.opponentName}`);
-    labels.message.textContent = state.turn === myTeam
-      ? `Matched as ${TEAM[message.team].name} vs ${message.opponentName}. Your turn.`
-      : `Matched as ${TEAM[message.team].name} vs ${message.opponentName}. Opponent move.`;
+    setMessage("Matched vs ", coloredPlayerName(opponentTeam(message.team)), ". ", coloredPlayerName(state.turn), " to move.");
     hideEndGameUI();
     updateHighlights();
     updateStatus();
@@ -654,9 +688,11 @@ function handleServerMessage(message: ServerMessage): void {
 
   if (message.type === "opponentDisconnected") {
     if (message.state) state = message.state;
+    const disconnectedTeam = myTeam ? opponentTeam(myTeam) : null;
+    const disconnectedName = disconnectedTeam ? coloredPlayerName(disconnectedTeam) : "Opponent";
     gameId = null;
     myTeam = null;
-    labels.message.textContent = "The opponent disconnected. Queue again when ready.";
+    setMessage(disconnectedName, " disconnected. Queue again when ready.");
     queueing = false;
     updateHighlights();
     updateStatus();
@@ -693,14 +729,13 @@ function applyLocalMove(move: Move): void {
 function updateAfterStateChange(eliminated: string[]): void {
   if (!state) return;
   if (state.gameOver) {
-    labels.message.textContent = state.winner === "draw" ? "Draw." : `${TEAM[state.winner ?? "red"].name} won.`;
+    if (state.winner === "draw") labels.message.textContent = "Draw.";
+    else setMessage(coloredPlayerName(state.winner ?? "red"), " won.");
     triggerEndGameUI(state.winner);
   } else if (eliminated.length > 0) {
     labels.message.textContent = "Hit scored. Choose one highlighted point.";
   } else if (mode === "network") {
-    labels.message.textContent = state.turn === myTeam
-      ? "Your turn."
-      : "Opponent move.";
+    setMessage(coloredPlayerName(state.turn), " to move.");
   } else {
     labels.message.textContent = `${TEAM[state.turn].name} to move.`;
   }
@@ -845,9 +880,13 @@ function updateHighlights(): void {
 function updateStatus(): void {
   const waitingForNetworkOpponent = Boolean(state && mode === "network" && myTeam && state.turn !== myTeam && !state.gameOver && !replaying);
   endGame.container.classList.toggle("waiting-network", waitingForNetworkOpponent);
+  if (waitingForNetworkOpponent && state) endGame.container.dataset.waitingLabel = `${playerNameFor(state.turn)} to move`;
+  else delete endGame.container.dataset.waitingLabel;
   if (!state) {
     labels.turn.textContent = "-";
     labels.moving.textContent = "-";
+    labels.turn.style.color = "";
+    labels.moving.style.color = "";
     labels.velocity.textContent = "-";
     labels.redAlive.textContent = "0";
     labels.blueAlive.textContent = "0";
@@ -861,15 +900,15 @@ function updateStatus(): void {
   updateActiveHud(token);
   labels.turn.textContent = state.gameOver
     ? "Game over"
-    : waitingForNetworkOpponent
-      ? "Opponent move"
-      : TEAM[state.turn].name;
-  labels.moving.textContent = token ? `${TEAM[token.team].name} ${token.type}` : "-";
+    : playerNameFor(state.turn);
+  labels.turn.style.color = state.gameOver ? "" : TEAM[state.turn].color;
+  labels.moving.textContent = token ? `${playerNameFor(token.team)} ${token.type}` : "-";
+  labels.moving.style.color = token ? TEAM[token.team].color : "";
   labels.velocity.textContent = token ? `(${token.vx}, ${token.vy})` : "-";
   labels.redAlive.textContent = aliveSummary("red");
   labels.blueAlive.textContent = aliveSummary("blue");
-  labels.mobileRedStats.textContent = `Red: ${aliveSummaryCompact("red")}`;
-  labels.mobileBlueStats.textContent = `Blue: ${aliveSummaryCompact("blue")}`;
+  labels.mobileRedStats.textContent = `${playerNameFor("red")}: ${aliveSummaryCompact("red")}`;
+  labels.mobileBlueStats.textContent = `${playerNameFor("blue")}: ${aliveSummaryCompact("blue")}`;
 }
 
 function updateActiveHud(token: Token | null): void {
@@ -1561,9 +1600,9 @@ function gridToPixel(point: { x: number; y: number }, geo: ReturnType<typeof boa
 function triggerEndGameUI(winner: Team | "draw" | null): void {
   hideEndGameUI();
   const outcome = winner ?? "draw";
-  endGame.overlayTitle.textContent = outcome === "draw" ? "Draw" : `${TEAM[outcome].name} Wins`;
+  endGame.overlayTitle.textContent = outcome === "draw" ? "Draw" : `${playerNameFor(outcome)} Wins`;
   endGame.overlayTitle.className = `winner-${outcome}`;
-  endGame.bannerText.textContent = outcome === "draw" ? "Draw" : `${TEAM[outcome].name} Team Won`;
+  endGame.bannerText.textContent = outcome === "draw" ? "Draw" : `${playerNameFor(outcome)} Won`;
   endGame.banner.className = `end-game-banner active banner-${outcome}`;
   endGame.container.classList.add(`winner-${outcome}`);
   endGame.overlay.classList.add("active");
@@ -1585,7 +1624,7 @@ function showPersistentBannerOnly(): void {
   endGame.container.classList.remove("winner-red", "winner-blue", "winner-draw");
   endGame.container.classList.add(`winner-${outcome}`);
   endGame.banner.className = `end-game-banner active banner-${outcome} no-delay`;
-  endGame.bannerText.textContent = outcome === "draw" ? "Draw" : `${TEAM[outcome].name} Team Won`;
+  endGame.bannerText.textContent = outcome === "draw" ? "Draw" : `${playerNameFor(outcome)} Won`;
 }
 
 function send(message: ClientMessage): void {
