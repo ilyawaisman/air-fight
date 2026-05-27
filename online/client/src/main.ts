@@ -173,7 +173,7 @@ function bindControls(): void {
       applyModeUi();
       if (mode === "network") {
         resetNetworkGame();
-        labels.message.textContent = "Choose New to queue for an online game.";
+        labels.message.textContent = "Choose Queue to play online.";
       } else {
         startLocalGame();
       }
@@ -347,7 +347,7 @@ function selectedMode(): PlayMode {
 }
 
 function applyModeUi(): void {
-  labels.mode.textContent = mode === "computer" ? "Computer" : mode === "local" ? "Hot Seat" : "Network";
+  labels.mode.textContent = mode === "computer" ? "Solo" : mode === "local" ? "Hot Seat" : "Online";
   controls.networkOnly.forEach((element) => {
     element.classList.toggle("is-hidden", mode !== "network");
   });
@@ -415,7 +415,7 @@ function startLocalGame(): void {
   applyRestartMapOption(previousState, state);
   history = [cloneState(state)];
   hideEndGameUI();
-  labels.message.textContent = mode === "computer" ? "Red to move. Blue is computer." : "Red to move.";
+  labels.message.textContent = mode === "computer" ? "Red to move. Blue is AI." : "Red to move.";
   updateHighlights();
   updateStatus();
   updateReplayControls();
@@ -1204,7 +1204,7 @@ function drawEmptyBoard(geo: ReturnType<typeof boardGeometry>): void {
   ctx.font = `${18 * geo.dpr}px system-ui`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("Queue for a network match", geo.width / 2, geo.height / 2);
+  ctx.fillText("Queue for an online match", geo.width / 2, geo.height / 2);
 }
 
 function drawPaper(geo: ReturnType<typeof boardGeometry>): void {
