@@ -5,6 +5,23 @@ import type { GamePreset, GameState, Move, ObstacleType, PresetId, Team, Token }
 import type { ClientMessage, ServerMessage } from "../../shared/protocol.js";
 
 type PlayMode = "computer" | "local" | "network";
+interface ExplosionEffect {
+  x: number;
+  y: number;
+  color: string;
+  born: number;
+}
+
+interface LaserEffect {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  color: string;
+  born: number;
+}
+
+const HIT_RADIUS = 1;
 const TURRET_RADIUS = 5;
 
 const canvas = document.querySelector<HTMLCanvasElement>("#board")!;
@@ -82,7 +99,10 @@ let highlightedMoves: Move[] = [];
 let history: GameState[] = [];
 let replaying = false;
 let replayTimer = 0;
+let effectsFrame = 0;
 let speedIndex = 0;
+let explosions: ExplosionEffect[] = [];
+let lasers: LaserEffect[] = [];
 
 applyModeUi();
 startLocalGame();
@@ -253,6 +273,7 @@ function obstacleTypeFromControls(): ObstacleType {
 
 function startLocalGame(): void {
   window.clearTimeout(aiTimer);
+  clearEffects();
   gameId = null;
   myTeam = null;
   const previousState = state;
@@ -290,6 +311,7 @@ function applyRestartMapOption(previousState: GameState | null, nextState: GameS
 
 function resetNetworkGame(): void {
   window.clearTimeout(aiTimer);
+  clearEffects();
   gameId = null;
   myTeam = null;
   state = null;
@@ -344,6 +366,7 @@ function handleServerMessage(message: ServerMessage): void {
   }
 
   if (message.type === "matchFound") {
+    clearEffects();
     state = message.state;
     history = [cloneState(state)];
     gameId = message.gameId;
@@ -361,8 +384,10 @@ function handleServerMessage(message: ServerMessage): void {
   }
 
   if (message.type === "gameState") {
+    const previous = state ? cloneState(state) : null;
     state = message.state;
     history.push(cloneState(state));
+    if (previous) addEffectsFromTransition(previous, state, message.eliminated);
     updateAfterStateChange(message.eliminated);
     return;
   }
@@ -399,11 +424,13 @@ function submitMove(move: Move): void {
 
 function applyLocalMove(move: Move): void {
   if (!state) return;
+  const previous = cloneState(state);
   const result = applyMove(state, state.turn, move);
   state = result.state;
   if (!result.ok) labels.message.textContent = result.error ?? "Move rejected.";
   else {
     history.push(cloneState(state));
+    addEffectsFromTransition(previous, state, result.eliminated);
     updateAfterStateChange(result.eliminated);
   }
   scheduleComputerMove();
@@ -435,26 +462,115 @@ function scheduleComputerMove(): void {
   labels.message.textContent = "Blue is thinking.";
   aiTimer = window.setTimeout(() => {
     if (!state || state.turn !== "blue" || state.gameOver) return;
-    const moves = legalMoves(state);
-    const move = chooseComputerMove(moves);
+    const token = activeToken(state);
+    const move = token ? chooseComputerMove(token) : null;
     if (move) applyLocalMove(move);
   }, 380);
 }
 
-function chooseComputerMove(moves: Move[]): Move | null {
-  if (!state || moves.length === 0) return null;
-  const token = activeToken(state);
-  if (!token) return moves[0] ?? null;
-  return [...moves].sort((a, b) => scoreMove(token, b) - scoreMove(token, a))[0] ?? null;
+function chooseComputerMove(token: Token): Move | null {
+  if (!state) return null;
+  const moves = legalMoves(state, token);
+  const insideMoves = moves.filter((move) => inside(move, token.type === "plane"));
+  const candidates = insideMoves.length ? insideMoves : moves;
+  const parsedObstacles = parseObstacles();
+
+  let best = candidates[0] ?? null;
+  let bestScore = -Infinity;
+  for (const move of candidates) {
+    const score = token.type === "plane"
+      ? scoreComputerPlaneMove(token, move, parsedObstacles)
+      : scoreComputerTurretMove(token, move, parsedObstacles);
+    if (score > bestScore) {
+      bestScore = score;
+      best = move;
+    }
+  }
+  return best;
 }
 
-function scoreMove(token: Token, move: Move): number {
+function scoreComputerPlaneMove(token: Token, move: Move, parsedObstacles: Array<{ cx: number; cy: number }>): number {
   if (!state) return 0;
-  const enemies = state.tokens.filter((item) => item.alive && item.team !== token.team);
-  const nearest = enemies.reduce((best, enemy) => Math.min(best, token.type === "turret" ? distanceManhattan(move, enemy) : distanceLInf(move, enemy)), Infinity);
-  const centerBias = -distanceLInf(move, { x: state.width / 2, y: state.height / 2 }) * 0.05;
-  const aggression = Number.isFinite(nearest) ? -nearest : 0;
-  return aggression + centerBias + Math.random() * 0.2;
+  const start = { x: token.x, y: token.y };
+  if (!inside(move, true)) return -100000;
+  if (pathIntersectsObstaclesFast(start, move, parsedObstacles)) return -100000;
+
+  for (const target of state.tokens) {
+    if (target.alive && target.id !== token.id && pointOnSegment(target, start, move)) return -100000;
+  }
+
+  const enemies = state.tokens.filter((target) => target.alive && target.team !== token.team);
+  const enemyTurrets = enemies.filter((target) => target.type === "turret");
+  let score = Math.random() * 0.2;
+
+  for (const target of enemies) {
+    const d = distanceLInf(move, target);
+    if (d <= HIT_RADIUS) score += target.type === "turret" ? 12000 : 8000;
+    score += 80 / (d + 1);
+  }
+
+  for (const turret of enemyTurrets) {
+    if (distanceManhattan(move, turret) <= TURRET_RADIUS && !pathIntersectsObstaclesOpen(move, turret)) score -= 6500;
+  }
+
+  const nextVx = token.vx + move.ax;
+  const nextVy = token.vy + move.ay;
+  score -= 0.08 * (nextVx * nextVx + nextVy * nextVy);
+
+  const steps = survivalDepth(move.x, move.y, nextVx, nextVy, 1, 3, token.id, parsedObstacles);
+  if (steps < 3) score -= (3 - steps) * 25000;
+
+  return score;
+}
+
+function scoreComputerTurretMove(token: Token, move: Move, parsedObstacles: Array<{ cx: number; cy: number }>): number {
+  if (!state) return 0;
+  const start = { x: token.x, y: token.y };
+  if (!inside(move, false)) return -100000;
+  if (pathIntersectsObstaclesFast(start, move, parsedObstacles)) return -100000;
+
+  for (const target of state.tokens) {
+    if (target.alive && target.id !== token.id && pointOnSegment(target, start, move)) return -100000;
+  }
+
+  const enemyPlanes = state.tokens.filter((target) => target.alive && target.team !== token.team && target.type === "plane");
+  if (enemyPlanes.length === 0) return 0;
+  return -Math.min(...enemyPlanes.map((plane) => distanceManhattan(move, plane)));
+}
+
+function survivalDepth(
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  currentDepth: number,
+  maxDepth: number,
+  tokenId: string,
+  parsedObstacles: Array<{ cx: number; cy: number }>,
+): number {
+  if (!state || currentDepth === maxDepth) return maxDepth;
+  let maxChildDepth = currentDepth;
+
+  for (let dx = -1; dx <= 1; dx += 1) {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      const nvx = vx + dx;
+      const nvy = vy + dy;
+      const nx = x + nvx;
+      const ny = y + nvy;
+      const start = { x, y };
+      const end = { x: nx, y: ny };
+
+      if (!inside(end, true)) continue;
+      if (pathIntersectsObstaclesFast(start, end, parsedObstacles)) continue;
+      if (state.tokens.some((target) => target.alive && target.id !== tokenId && pointOnSegment(target, start, end))) continue;
+
+      const depth = survivalDepth(nx, ny, nvx, nvy, currentDepth + 1, maxDepth, tokenId, parsedObstacles);
+      if (depth > maxChildDepth) maxChildDepth = depth;
+      if (maxChildDepth === maxDepth) return maxDepth;
+    }
+  }
+
+  return maxChildDepth;
 }
 
 function canMoveNow(): boolean {
@@ -503,6 +619,7 @@ function startReplay(): void {
   if (history.length < 2) return;
   replaying = true;
   window.clearTimeout(aiTimer);
+  clearEffects();
   let index = 0;
   controls.replay.forEach((button) => {
     button.textContent = "Stop";
@@ -514,7 +631,9 @@ function startReplay(): void {
       stopReplay();
       return;
     }
+    const previous = index > 0 ? history[index - 1] : null;
     state = cloneState(frame);
+    if (previous) addEffectsFromTransition(previous, state, eliminatedBetween(previous, state));
     highlightedMoves = [];
     updateStatus();
     draw();
@@ -534,6 +653,7 @@ function stopReplay(): void {
   if (!replaying) return;
   replaying = false;
   window.clearTimeout(replayTimer);
+  clearEffects();
   const latest = history.at(-1);
   if (latest) state = cloneState(latest);
   updateHighlights();
@@ -583,7 +703,10 @@ function draw(): void {
   drawObstacles(geo);
   drawTrajectories(geo);
   drawHighlights(geo);
+  drawLasers(geo);
   drawTokens(geo);
+  drawExplosions(geo);
+  if (lasers.length > 0 || explosions.length > 0) scheduleEffectsDraw();
 }
 
 function drawTurretZones(geo: ReturnType<typeof boardGeometry>): void {
@@ -825,6 +948,103 @@ function drawTokens(geo: ReturnType<typeof boardGeometry>): void {
   }
 }
 
+function drawExplosions(geo: ReturnType<typeof boardGeometry>): void {
+  const now = performance.now();
+  explosions = explosions.filter((boom) => now - boom.born < 620);
+
+  for (const boom of explosions) {
+    const age = (now - boom.born) / 620;
+    const p = gridToPixel(boom, geo);
+    const radius = (0.35 + age * 1.6) * geo.cell;
+    ctx.save();
+    ctx.globalAlpha = 1 - age;
+    ctx.strokeStyle = "#d8911d";
+    ctx.fillStyle = boom.color;
+    ctx.lineWidth = Math.max(2 * geo.dpr, geo.cell * 0.12);
+    for (let i = 0; i < 10; i += 1) {
+      const angle = (i / 10) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x + Math.cos(angle) * radius * 0.35, p.y + Math.sin(angle) * radius * 0.35);
+      ctx.lineTo(p.x + Math.cos(angle) * radius, p.y + Math.sin(angle) * radius);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawLasers(geo: ReturnType<typeof boardGeometry>): void {
+  const now = performance.now();
+  lasers = lasers.filter((laser) => now - laser.born < 800);
+
+  ctx.save();
+  for (const laser of lasers) {
+    const age = now - laser.born;
+    const baseOpacity = age > 300 ? Math.max(0, 1 - (age - 300) / 500) : 1;
+    const flicker = 0.7 + 0.3 * Math.sin(age * 0.15);
+    const opacity = baseOpacity * flicker;
+    const fromPx = gridToPixel({ x: laser.fromX, y: laser.fromY }, geo);
+    const toPx = gridToPixel({ x: laser.toX, y: laser.toY }, geo);
+    const growProgress = Math.min(1, age / 200);
+    const currentToX = fromPx.x + (toPx.x - fromPx.x) * growProgress;
+    const currentToY = fromPx.y + (toPx.y - fromPx.y) * growProgress;
+
+    ctx.strokeStyle = laser.color;
+    ctx.lineWidth = Math.max(6 * geo.dpr, geo.cell * 0.28);
+    ctx.globalAlpha = opacity * 0.55;
+    ctx.shadowColor = laser.color;
+    ctx.shadowBlur = Math.max(15 * geo.dpr, geo.cell * 0.6);
+    ctx.beginPath();
+    ctx.moveTo(fromPx.x, fromPx.y);
+    ctx.lineTo(currentToX, currentToY);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(2 * geo.dpr, geo.cell * 0.08);
+    ctx.globalAlpha = opacity;
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(fromPx.x, fromPx.y);
+    ctx.lineTo(currentToX, currentToY);
+    ctx.stroke();
+
+    const boltProgress = Math.min(1, age / 350);
+    if (boltProgress < 1) {
+      const bx = fromPx.x + (toPx.x - fromPx.x) * boltProgress;
+      const by = fromPx.y + (toPx.y - fromPx.y) * boltProgress;
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = laser.color;
+      ctx.shadowBlur = 12 * geo.dpr;
+      ctx.globalAlpha = baseOpacity;
+      ctx.beginPath();
+      ctx.arc(bx, by, Math.max(5 * geo.dpr, geo.cell * 0.22), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    if (age > 350) {
+      const flashAge = age - 350;
+      const flashProgress = Math.min(1, flashAge / 300);
+      const flashOpacity = (1 - flashProgress) * baseOpacity;
+      const flashRadius = flashProgress * geo.cell * 1.6;
+      ctx.strokeStyle = laser.color;
+      ctx.lineWidth = Math.max(2.5 * geo.dpr, geo.cell * 0.1);
+      ctx.globalAlpha = flashOpacity;
+      ctx.beginPath();
+      ctx.arc(toPx.x, toPx.y, flashRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = flashOpacity * 0.4;
+      ctx.beginPath();
+      ctx.arc(toPx.x, toPx.y, flashRadius * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 function turretAngle(token: Token): number {
   return token.team === "red" ? -Math.PI / 2 : Math.PI / 2;
 }
@@ -871,12 +1091,176 @@ function send(message: ClientMessage): void {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
+function addEffectsFromTransition(before: GameState, after: GameState, eliminatedIds: string[]): void {
+  const born = performance.now();
+  for (const id of eliminatedIds) {
+    const beforeToken = before.tokens.find((token) => token.id === id);
+    const afterToken = after.tokens.find((token) => token.id === id) ?? beforeToken;
+    if (!beforeToken || !afterToken) continue;
+    explosions.push({ x: afterToken.x, y: afterToken.y, color: TEAM[beforeToken.team].color, born });
+    const shot = inferShot(before, after, beforeToken);
+    if (shot) lasers.push({ ...shot, born });
+  }
+  if (eliminatedIds.length > 0) scheduleEffectsDraw();
+}
+
+function inferShot(before: GameState, after: GameState, target: Token): Omit<LaserEffect, "born"> | null {
+  const moverBefore = before.activeId ? before.tokens.find((token) => token.id === before.activeId) : null;
+  const moverAfter = moverBefore ? after.tokens.find((token) => token.id === moverBefore.id) : null;
+  if (moverBefore && moverAfter && moverAfter.id !== target.id && moverAfter.alive && moverAfter.type === "plane" && moverAfter.team !== target.team) {
+    if (distanceLInf(moverAfter, target) <= HIT_RADIUS) {
+      return { fromX: moverAfter.x, fromY: moverAfter.y, toX: target.x, toY: target.y, color: TEAM[moverAfter.team].color };
+    }
+  }
+
+  if (target.type === "plane") {
+    const turret = after.tokens.find((token) => (
+      token.alive
+      && token.type === "turret"
+      && token.team !== target.team
+      && distanceManhattan(token, target) <= TURRET_RADIUS
+      && !pathIntersectsObstaclesOpenInState(after, token, target)
+    ));
+    if (turret) return { fromX: turret.x, fromY: turret.y, toX: target.x, toY: target.y, color: TEAM[turret.team].color };
+  }
+
+  return null;
+}
+
+function eliminatedBetween(before: GameState, after: GameState): string[] {
+  return before.tokens
+    .filter((token) => token.alive && !after.tokens.find((afterToken) => afterToken.id === token.id)?.alive)
+    .map((token) => token.id);
+}
+
+function clearEffects(): void {
+  explosions = [];
+  lasers = [];
+  if (effectsFrame) {
+    cancelAnimationFrame(effectsFrame);
+    effectsFrame = 0;
+  }
+}
+
+function scheduleEffectsDraw(): void {
+  if (effectsFrame) return;
+  effectsFrame = requestAnimationFrame(() => {
+    effectsFrame = 0;
+    draw();
+  });
+}
+
 function distanceLInf(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
 function distanceManhattan(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function parseObstacles(): Array<{ cx: number; cy: number }> {
+  if (!state) return [];
+  return state.obstacles.map((key) => {
+    const [cx = 0, cy = 0] = key.split(",").map(Number);
+    return { cx, cy };
+  });
+}
+
+function inside(point: { x: number; y: number }, isPlane = false): boolean {
+  if (!state) return false;
+  if (isPlane) return point.x > 0 && point.y > 0 && point.x < state.width && point.y < state.height;
+  return point.x >= 0 && point.y >= 0 && point.x <= state.width && point.y <= state.height;
+}
+
+function pathIntersectsObstaclesFast(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  parsedObstacles: Array<{ cx: number; cy: number }>,
+): boolean {
+  if (parsedObstacles.length === 0) return false;
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+
+  for (const obstacle of parsedObstacles) {
+    if (obstacle.cx + 1 < minX || obstacle.cx > maxX || obstacle.cy + 1 < minY || obstacle.cy > maxY) continue;
+    if (segmentIntersectsCell(start, end, obstacle.cx, obstacle.cy, true)) return true;
+  }
+  return false;
+}
+
+function pathIntersectsObstaclesOpen(start: { x: number; y: number }, end: { x: number; y: number }): boolean {
+  return parseObstacles().some((obstacle) => segmentIntersectsCell(start, end, obstacle.cx, obstacle.cy, false));
+}
+
+function pathIntersectsObstaclesOpenInState(game: GameState, start: { x: number; y: number }, end: { x: number; y: number }): boolean {
+  return game.obstacles.some((key) => {
+    const [cx = 0, cy = 0] = key.split(",").map(Number);
+    return segmentIntersectsCell(start, end, cx, cy, false);
+  });
+}
+
+function segmentIntersectsCell(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  cx: number,
+  cy: number,
+  closed: boolean,
+): boolean {
+  const range = segmentIntersectionRange(start, end, cx, cy);
+  if (!range) return false;
+  return closed ? range[0] <= range[1] : range[0] < range[1];
+}
+
+function segmentIntersectionRange(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  cx: number,
+  cy: number,
+): [number, number] | null {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  let txMin = -Infinity;
+  let txMax = Infinity;
+  if (dx === 0) {
+    if (start.x < cx || start.x > cx + 1) return null;
+  } else {
+    const t1 = (cx - start.x) / dx;
+    const t2 = (cx + 1 - start.x) / dx;
+    txMin = Math.min(t1, t2);
+    txMax = Math.max(t1, t2);
+  }
+
+  let tyMin = -Infinity;
+  let tyMax = Infinity;
+  if (dy === 0) {
+    if (start.y < cy || start.y > cy + 1) return null;
+  } else {
+    const t1 = (cy - start.y) / dy;
+    const t2 = (cy + 1 - start.y) / dy;
+    tyMin = Math.min(t1, t2);
+    tyMax = Math.max(t1, t2);
+  }
+
+  const tStart = Math.max(txMin, tyMin, 0);
+  const tEnd = Math.min(txMax, tyMax, 1);
+  return tStart <= tEnd ? [tStart, tEnd] : null;
+}
+
+function pointOnSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): boolean {
+  if (point.x === start.x && point.y === start.y) return false;
+  const crossProduct = (point.y - start.y) * (end.x - start.x) - (point.x - start.x) * (end.y - start.y);
+  if (Math.abs(crossProduct) > 0.000001) return false;
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+  return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
 }
 
 function clamp(value: number, min: number, max: number): number {
