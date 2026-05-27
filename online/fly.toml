@@ -1,4 +1,5 @@
 app = "air-fight"
+primary_region = "ams"
 
 [build]
   dockerfile = "Dockerfile"
