@@ -705,7 +705,7 @@ function updateHighlights(): void {
 }
 
 function updateStatus(): void {
-  const waitingForNetworkOpponent = Boolean(state && mode === "network" && myTeam && state.turn !== myTeam && !state.gameOver);
+  const waitingForNetworkOpponent = Boolean(state && mode === "network" && myTeam && state.turn !== myTeam && !state.gameOver && !replaying);
   endGame.container.classList.toggle("waiting-network", waitingForNetworkOpponent);
   if (!state) {
     labels.turn.textContent = "-";
